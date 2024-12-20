@@ -1,5 +1,7 @@
 # gaiaDB 
 
+### WARNING: this package is under-development and has only been tested using mock data
+
 # Introduction 
 TODO 
 
