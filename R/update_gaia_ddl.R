@@ -15,5 +15,5 @@ for (dialect in c("postgresql")) {
 
 ddl_sql <- render(sql = readSql(paste0("ddl/", gaiaVersion,"/postgresql/gaia_postgresql_", gaiaVersion,"_ddl.sql")), cdmDatabaseSchema="backbone")
 
-SqlRender::renderSqlFile("init_template.sql", "init.sql", gaia_ddl = ddl_sql)
+SqlRender::renderSqlFile("ddl/init_template.sql", "init.sql", gaia_ddl = ddl_sql)
 

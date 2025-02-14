@@ -1,0 +1,27 @@
+name: "gaiaDB"
+output_dir: "../docs"
+output:
+  html_document:
+    theme: cosmo
+    css: style.css
+    includes:
+      in_header: "favicon.html"
+exclude: ["extras"]
+navbar:
+  title: '<div><img src="ohdsi16x16.png"></img> gaiaDB </div>'
+  right:
+    - icon: fa-github
+      href: https://github.com/OHDSI/gaiaDB
+  left:
+    - text: "Home"
+      icon: fa-home
+      href: index.html
+    - text: "Getting Started"
+      icon: fa-home
+      href: getting-started.html 
+    - text: "Design"
+      icon: fa-earth
+      href: design.html
+    - text: "Data Model"
+      icon: fa-book
+      href: models.html
