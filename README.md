@@ -19,7 +19,7 @@ cd gaiaDB
 
 docker build -t gaia-db .
 
-docker run -itd --rm -e POSTGRES_PASSWORD=SuperSecret -e POSTGRES_USER=postgres --network gaia -p 5432:5432 --name gaia-db gaia-db
+docker run -itd --rm -e POSTGRES_PASSWORD=SuperSecret -e POSTGRES_USER=postgres -p 5432:5432 --name gaia-db gaia-db
 ```
 
 Once deployed and (automatically) initialized, the containerized Postgres database includes:
