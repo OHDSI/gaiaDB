@@ -29,3 +29,10 @@ Once deployed and (automatically) initialized, the containerized Postgres databa
 
 # Support 
 Please use the <a href="https://github.com/OHDSI/gaiaDB/issues">GitHub issue tracker</a> for data issues and requests
+
+# Developer Guidelines
+
+- Please create a new issue for changes 
+- Please create a new branch with code changes and create a Pull Request when ready for merge
+- Pull Requests must be reviewed before merging to main
+- After PR merge approval the branch will be evaluated and a determination will be made to keep the branch for further development or to delete the branch
