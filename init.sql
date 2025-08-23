@@ -9,73 +9,44 @@ CREATE SCHEMA IF NOT EXISTS backbone;
 
 SET search_path = backbone, public;
 
---postgresql DDL Specification for Gaia Data Model 0.1
---HINT DISTRIBUTE ON RANDOM
-CREATE TABLE backbone.data_source (
-			data_source_uuid int4 NOT NULL,
-			org_id varchar(100) NOT NULL,
-			org_set_id varchar(100) NOT NULL,
-			dataset_name varchar(100) NOT NULL,
-			dataset_version varchar(100) NOT NULL,
-			geom_type varchar(100) NULL,
-			geom_spec text NULL,
-			boundary_type varchar(100) NULL,
-			has_attributes int4 NULL,
-			download_method varchar(100) NOT NULL,
-			download_subtype varchar(100) NOT NULL,
-			download_data_standard varchar(100) NOT NULL,
-			download_filename varchar(100) NOT NULL,
-			download_url varchar(255) NOT NULL,
-			download_auth varchar(100) NULL,
-			documentation_url varchar(255) NULL );
---HINT DISTRIBUTE ON RANDOM
-CREATE TABLE backbone.variable_source (
-			variable_source_id serial4 NOT NULL,
-			geom_dependency_uuid int4 NULL,
-			variable_name varchar NOT NULL,
-			variable_desc text NOT NULL,
-			data_source_uuid int4 NOT NULL,
-			attr_spec text NOT NULL );
---HINT DISTRIBUTE ON RANDOM
-CREATE TABLE backbone.attr_index (
-			attr_index_id numeric NOT NULL,
-			variable_source_id numeric NOT NULL,
-			attr_of_geom_index_id numeric NOT NULL,
-			database_schema varchar(255) NOT NULL,
-			table_name varchar(255) NOT NULL,
-			data_source_id numeric NOT NULL );
---HINT DISTRIBUTE ON RANDOM
+--postgresql DDL Specification for Gaia Data Model 0.1.1
+
 CREATE TABLE backbone.geom_index (
-			geom_index_id numeric NOT NULL,
+			geom_index_id SERIAL4 PRIMARY KEY,
 			data_type_id numeric NULL,
 			data_type_name varchar(255) NOT NULL,
 			geom_type_concept_id numeric NULL,
 			geom_type_source_value varchar(255) NULL,
-			database_schema varchar(255) NOT NULL,
 			table_name varchar(255) NOT NULL,
 			table_desc varchar(255) NOT NULL,
-			data_source_id numeric NOT NULL );
---HINT DISTRIBUTE ON RANDOM
-CREATE TABLE backbone.attr_template (
-			attr_record_id serial4 NOT NULL,
-			geom_record_id int4 NOT NULL,
-			variable_source_record_id int4 NOT NULL,
+			database_schema varchar(255) NOT NULL );
+
+CREATE TABLE backbone.attr_index (
+			attr_index_id SERIAL4 PRIMARY KEY,
+			geom_index_id int4 NOT NULL,
+			CONSTRAINT fk_attr_index_geom_index
+			  FOREIGN KEY (geom_index_id) 
+			  REFERENCES backbone.geom_index (geom_index_id),
+			table_name varchar(255) NOT NULL,
+			variable_name varchar NOT NULL,
+			variable_desc text NOT NULL,
 			attr_concept_id int4 NULL,
-			attr_start_date date NOT NULL,
-			attr_end_date date NOT NULL,
-			value_as_number float8 NULL,
-			value_as_string varchar NULL,
-			value_as_concept_id int4 NULL,
 			unit_concept_id int4 NULL,
 			unit_source_value varchar NULL,
+			attr_start_date date NOT NULL,
+			attr_end_date date NOT NULL,
 			qualifier_concept_id int4 NULL,
 			qualifier_source_value varchar NULL,
 			attr_source_concept_id int4 NULL,
 			attr_source_value varchar NOT NULL,
-			value_source_value varchar NOT NULL );
---HINT DISTRIBUTE ON RANDOM
+			database_schema varchar(255) NOT NULL );
+
 CREATE TABLE backbone.geom_template (
-			geom_record_id serial4 NOT NULL,
+			geom_record_id SERIAL4 PRIMARY KEY,
+			geom_index_id int4 NOT NULL,
+			CONSTRAINT fk_geom_template_geom_index
+			  FOREIGN KEY (geom_index_id) 
+			  REFERENCES backbone.geom_index (geom_index_id),
 			geom_name varchar NOT NULL,
 			geom_source_coding varchar NOT NULL,
 			geom_source_value varchar NOT NULL,
@@ -83,84 +54,21 @@ CREATE TABLE backbone.geom_template (
 			geom_local_epsg int4 NOT NULL,
 			geom_local_value geometry NOT NULL );
 
-CREATE SEQUENCE IF NOT EXISTS attr_index_attr_index_id_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 2147483647
-	START 1
-	CACHE 1
-	NO CYCLE;
+CREATE TABLE backbone.attr_template (
+			attr_record_id serial4 NOT NULL,
+			attr_index_id int4 NOT NULL,
+			CONSTRAINT fk_attr_template_attr_index
+			  FOREIGN KEY (attr_index_id) 
+			  REFERENCES backbone.attr_index (attr_index_id),
+			geom_record_id int4 NOT NULL,
+			CONSTRAINT fk_attr_template_geom_template
+			  FOREIGN KEY (geom_record_id) 
+			  REFERENCES backbone.geom_template (geom_record_id),
+			value_as_number float8 NULL,
+			value_as_string varchar NULL,
+			value_as_concept_id int4 NULL,
+			value_source_value varchar NOT NULL );
 
-CREATE SEQUENCE IF NOT EXISTS attr_template_attr_record_id_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 2147483647
-	START 1
-	CACHE 1
-	NO CYCLE;
-
-CREATE SEQUENCE IF NOT EXISTS variable_source_variable_source_id_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 2147483647
-	START 1
-	CACHE 1
-	NO CYCLE;
-
-CREATE SEQUENCE IF NOT EXISTS geom_index_geom_index_id_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 2147483647
-	START 1
-	CACHE 1
-	NO CYCLE;
-
-CREATE SEQUENCE IF NOT EXISTS geom_template_geom_record_id_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 2147483647
-	START 1
-	CACHE 1
-	NO CYCLE;-- attr_index definition
-
-\COPY data_source FROM '/csv/data_source.csv' (FORMAT csv, HEADER);
-\COPY variable_source FROM '/csv/variable_source.csv' (FORMAT csv, HEADER);
-
-
-truncate geom_index;
-truncate attr_index;
-
-insert into geom_index
-select row_number() over() as geom_index_id
-		, null as data_type_id
-		, geom_type as data_type_name
-		, null as geom_type_concept_id
-		, boundary_type as geom_type_source_value
-		, regexp_replace(regexp_replace(lower(concat(org_id, '_', org_set_id)), '\W','_', 'g'), '^_+|_+$|_(?=_)', '', 'g') as database_schema
-		, regexp_replace(regexp_replace(lower(concat(dataset_name)), '\W','_', 'g'), '^_+|_+$|_(?=_)', '', 'g') as table_name
-		, concat_ws(' ', org_id, org_set_id, dataset_name) as table_desc
-		, data_source_uuid as data_source_id
-from data_source
-where geom_type <> ''
-and geom_type is not null
-and data_source_uuid not in (
-	select data_source_uuid
-	from geom_index
-);
-
-insert into attr_index
-select row_number() over() as attr_index_id
-		, vs.variable_source_id as variable_source_id
-		, gi.geom_index_id as attr_of_geom_index_id
-		, regexp_replace(regexp_replace(lower(concat(ds.org_id, '_', ds.org_set_id)), '\W','_', 'g'), '^_+|_+$|_(?=_)', '', 'g') as database_schema
-		, regexp_replace(regexp_replace(lower(concat(ds.dataset_name)), '\W','_', 'g'), '^_+|_+$|_(?=_)', '', 'g') as table_name
-		, ds.data_source_uuid as data_source_id
-from data_source ds
-inner join variable_source vs
-on ds.data_source_uuid = vs.data_source_uuid
-and ds.has_attributes=1
-inner join geom_index gi
-on gi.data_source_id = vs.geom_dependency_uuid;
 
 -- * - * - * - * - * - * - * - * - * -
 -- VOCABULARY SCHEMA CONSTRUCTION
@@ -284,7 +192,7 @@ INSERT INTO vocabulary.vocabulary SELECT * FROM vocabulary.temp_vocabulary_data 
 
 -- ADD CONCEPT_CLASSES
 CREATE TABLE vocabulary.temp_concept_class_data (
-    concept_class_id varchar(20) NOT NULL,
+    concept_class_id varchar(25) NOT NULL,
     concept_class_name varchar(255) NULL,
     concept_class_concept_id int4 NULL
 );
