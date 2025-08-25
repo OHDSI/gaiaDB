@@ -303,10 +303,6 @@ INSERT INTO vocabulary.relationship SELECT * FROM vocabulary.temp_relationship_d
 CREATE TABLE vocabulary.temp_concept_relationship_data (
     concept_id_1 int4 NULL,
     concept_id_2 int4 NULL,
-    concept_code_1 text NULL,
-    concept_code_2 text NULL,
-    vocabulary_id_1 text NULL,
-    vocabulary_id_2 text NULL,
     relationship_id text NULL,
     valid_start_date date NULL,
     valid_end_date date NULL,
