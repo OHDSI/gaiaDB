@@ -6,6 +6,7 @@ CREATE EXTENSION IF NOT EXISTS postgis;
 CREATE EXTENSION IF NOT EXISTS postgis_raster;
 
 CREATE SCHEMA IF NOT EXISTS backbone;
+CREATE SCHEMA IF NOT EXISTS gaia;
 
 SET search_path = backbone, public;
 
