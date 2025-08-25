@@ -15,9 +15,9 @@ SET search_path = backbone, public;
 CREATE TABLE backbone.geom_index (
 			geom_index_id SERIAL4 PRIMARY KEY,
 			data_type_id numeric NULL,
-			data_type_name varchar(255) NOT NULL,
+			data_type_name varchar(255) NULL,
 			geom_type_concept_id numeric NULL,
-			geom_type_source_value varchar(255) NULL,
+			geom_type_source_value varchar(255) NOT NULL,
 			table_name varchar(255) NOT NULL,
 			table_desc varchar(255) NOT NULL,
 			database_schema varchar(255) NOT NULL );
@@ -36,6 +36,8 @@ CREATE TABLE backbone.attr_index (
 			unit_source_value varchar NULL,
 			attr_start_date date NOT NULL,
 			attr_end_date date NOT NULL,
+			attr_no_value_as_number numeric NULL,
+			attr_no_value_as_string varchar NULL,
 			qualifier_concept_id int4 NULL,
 			qualifier_source_value varchar NULL,
 			attr_source_concept_id int4 NULL,
