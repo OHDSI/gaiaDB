@@ -82,9 +82,9 @@ CREATE SCHEMA IF NOT EXISTS vocabulary;
 CREATE TABLE vocabulary.concept (
 			concept_id integer NOT NULL,
 			concept_name varchar(255) NOT NULL,
-			domain_id varchar(20) NOT NULL,
-			vocabulary_id varchar(20) NOT NULL,
-			concept_class_id varchar(20) NOT NULL,
+			domain_id varchar(25) NOT NULL,
+			vocabulary_id varchar(25) NOT NULL,
+			concept_class_id varchar(25) NOT NULL,
 			standard_concept varchar(1) NULL,
 			concept_code varchar(50) NOT NULL,
 			valid_start_date date NOT NULL,
@@ -92,14 +92,14 @@ CREATE TABLE vocabulary.concept (
 			invalid_reason varchar(1) NULL );
 
 CREATE TABLE vocabulary.vocabulary (
-			vocabulary_id varchar(20) NOT NULL,
+			vocabulary_id varchar(25) NOT NULL,
 			vocabulary_name varchar(255) NOT NULL,
 			vocabulary_reference varchar(255) NULL,
 			vocabulary_version varchar(255) NULL,
 			vocabulary_concept_id integer NOT NULL );
 
 CREATE TABLE vocabulary.domain (
-			domain_id varchar(20) NOT NULL,
+			domain_id varchar(25) NOT NULL,
 			domain_name varchar(255) NOT NULL,
 			domain_concept_id integer NOT NULL );
 
@@ -111,17 +111,17 @@ CREATE TABLE vocabulary.concept_class (
 CREATE TABLE vocabulary.concept_relationship (
 			concept_id_1 integer NOT NULL,
 			concept_id_2 integer NOT NULL,
-			relationship_id varchar(20) NOT NULL,
+			relationship_id varchar(25) NOT NULL,
 			valid_start_date date NOT NULL,
 			valid_end_date date NOT NULL,
 			invalid_reason varchar(1) NULL );
 
 CREATE TABLE vocabulary.relationship (
-			relationship_id varchar(20) NOT NULL,
+			relationship_id varchar(25) NOT NULL,
 			relationship_name varchar(255) NOT NULL,
 			is_hierarchical varchar(1) NOT NULL,
 			defines_ancestry varchar(1) NOT NULL,
-			reverse_relationship_id varchar(20) NOT NULL,
+			reverse_relationship_id varchar(25) NOT NULL,
 			relationship_concept_id integer NOT NULL );
 
 CREATE TABLE vocabulary.concept_synonym (
@@ -138,10 +138,10 @@ CREATE TABLE vocabulary.concept_ancestor (
 CREATE TABLE vocabulary.source_to_concept_map (
 			source_code varchar(50) NOT NULL,
 			source_concept_id integer NOT NULL,
-			source_vocabulary_id varchar(20) NOT NULL,
+			source_vocabulary_id varchar(25) NOT NULL,
 			source_code_description varchar(255) NULL,
 			target_concept_id integer NOT NULL,
-			target_vocabulary_id varchar(20) NOT NULL,
+			target_vocabulary_id varchar(25) NOT NULL,
 			valid_start_date date NOT NULL,
 			valid_end_date date NOT NULL,
 			invalid_reason varchar(1) NULL );
@@ -161,7 +161,7 @@ CREATE TABLE vocabulary.drug_strength (
 			invalid_reason varchar(1) NULL );
 
 CREATE TABLE vocabulary.temp_vocabulary_data (
-    vocabulary_id varchar(20) NOT NULL,
+    vocabulary_id varchar(25) NOT NULL,
     vocabulary_name varchar(255) NULL,
     vocabulary_reference varchar(255) NULL,
     vocabulary_version varchar(255) NULL,
@@ -280,7 +280,7 @@ CREATE TABLE vocabulary.temp_relationship_data (
 	relationship_name varchar(255) NULL,
 	is_hierarchical varchar(1) NULL,
 	defines_ancestry varchar(1) NULL,
-	reverse_relationship_id varchar(20) NULL,
+	reverse_relationship_id varchar(25) NULL,
 	relationship_concept_id int4 NULL
 );
 \COPY vocabulary.temp_relationship_data FROM '/csv/gis_relationship_fragment.csv' DELIMITER ',' CSV HEADER;
