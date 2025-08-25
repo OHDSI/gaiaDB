@@ -220,7 +220,7 @@ INSERT INTO vocabulary.concept_class SELECT * FROM vocabulary.temp_concept_class
 
 -- ADD DOMAINS
 CREATE TABLE vocabulary.temp_domain_data (
-    domain_id varchar(20) NOT NULL,
+    domain_id varchar(25) NOT NULL,
     domain_name varchar(255) NULL,
     domain_concept_id int4 NULL
 );
@@ -276,7 +276,7 @@ FROM vocabulary.temp_concept_data
 
 -- ADD RELATIONSHIPS
 CREATE TABLE vocabulary.temp_relationship_data (
-    relationship_id varchar(20) NOT NULL,
+    relationship_id varchar(25) NOT NULL,
 	relationship_name varchar(255) NULL,
 	is_hierarchical varchar(1) NULL,
 	defines_ancestry varchar(1) NULL,
