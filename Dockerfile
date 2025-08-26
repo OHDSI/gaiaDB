@@ -7,4 +7,4 @@ RUN wget -O /csv/gis_domain_fragment.csv https://raw.githubusercontent.com/Tufts
 RUN wget -O /csv/gis_concept_fragment.csv https://raw.githubusercontent.com/TuftsCTSI/CVB/refs/heads/main/GIS/Ontology/concept_delta.csv
 RUN wget -O /csv/gis_relationship_fragment.csv https://raw.githubusercontent.com/TuftsCTSI/CVB/refs/heads/main/GIS/Ontology/relationship_delta.csv
 RUN wget -O /csv/gis_concept_relationship_fragment.csv https://raw.githubusercontent.com/TuftsCTSI/CVB/refs/heads/main/GIS/Ontology/concept_relationship_delta.csv
-COPY init.sql /docker-entrypoint-initdb.d/init.sql
+COPY ./init /docker-entrypoint-initdb.d
