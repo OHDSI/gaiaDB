@@ -19,7 +19,7 @@ CREATE TABLE backbone.geom_index (
 			geom_type_concept_id numeric NULL,
 			geom_type_source_value varchar(255) NOT NULL,
 			table_name varchar(255) NOT NULL,
-			table_desc varchar(255) NOT NULL,
+			table_desc text NOT NULL,
 			database_schema varchar(255) NOT NULL );
 
 CREATE TABLE backbone.attr_index (
@@ -45,7 +45,7 @@ CREATE TABLE backbone.attr_index (
 			database_schema varchar(255) NOT NULL );
 
 CREATE TABLE backbone.geom_template (
-			geom_record_id SERIAL4 PRIMARY KEY,
+			geom_record_id int4 PRIMARY KEY,
 			geom_index_id int4 NOT NULL,
 			CONSTRAINT fk_geom_template_geom_index
 			  FOREIGN KEY (geom_index_id) 
@@ -58,7 +58,7 @@ CREATE TABLE backbone.geom_template (
 			geom_local_value geometry NOT NULL );
 
 CREATE TABLE backbone.attr_template (
-			attr_record_id serial4 NOT NULL,
+			attr_record_id int4 PRIMARY KEY,
 			attr_index_id int4 NOT NULL,
 			CONSTRAINT fk_attr_template_attr_index
 			  FOREIGN KEY (attr_index_id) 

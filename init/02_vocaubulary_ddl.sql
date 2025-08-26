@@ -1,95 +1,4 @@
 -- * - * - * - * - * - * - * - * - * -
--- BACKBONE SCHEMA CONSTRUCTION
--- * - * - * - * - * - * - * - * - * -
-
-CREATE EXTENSION IF NOT EXISTS postgis;
-
-CREATE SCHEMA IF NOT EXISTS backbone;
-
-SET search_path = backbone, public;
-
-@gaia_ddl
-
-CREATE SEQUENCE IF NOT EXISTS attr_index_attr_index_id_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 2147483647
-	START 1
-	CACHE 1
-	NO CYCLE;
-
-CREATE SEQUENCE IF NOT EXISTS attr_template_attr_record_id_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 2147483647
-	START 1
-	CACHE 1
-	NO CYCLE;
-
-CREATE SEQUENCE IF NOT EXISTS variable_source_variable_source_id_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 2147483647
-	START 1
-	CACHE 1
-	NO CYCLE;
-
-CREATE SEQUENCE IF NOT EXISTS geom_index_geom_index_id_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 2147483647
-	START 1
-	CACHE 1
-	NO CYCLE;
-
-CREATE SEQUENCE IF NOT EXISTS geom_template_geom_record_id_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 2147483647
-	START 1
-	CACHE 1
-	NO CYCLE;-- attr_index definition
-
-\COPY data_source FROM '/csv/data_source.csv' (FORMAT csv, HEADER);
-\COPY variable_source FROM '/csv/variable_source.csv' (FORMAT csv, HEADER);
-
-
-truncate geom_index;
-truncate attr_index;
-
-insert into geom_index
-select row_number() over() as geom_index_id
-		, null as data_type_id
-		, geom_type as data_type_name
-		, null as geom_type_concept_id
-		, boundary_type as geom_type_source_value
-		, regexp_replace(regexp_replace(lower(concat(org_id, '_', org_set_id)), '\W','_', 'g'), '^_+|_+$|_(?=_)', '', 'g') as database_schema
-		, regexp_replace(regexp_replace(lower(concat(dataset_name)), '\W','_', 'g'), '^_+|_+$|_(?=_)', '', 'g') as table_name
-		, concat_ws(' ', org_id, org_set_id, dataset_name) as table_desc
-		, data_source_uuid as data_source_id
-from data_source
-where geom_type <> ''
-and geom_type is not null
-and data_source_uuid not in (
-	select data_source_uuid
-	from geom_index
-);
-
-insert into attr_index
-select row_number() over() as attr_index_id
-		, vs.variable_source_id as variable_source_id
-		, gi.geom_index_id as attr_of_geom_index_id
-		, regexp_replace(regexp_replace(lower(concat(ds.org_id, '_', ds.org_set_id)), '\W','_', 'g'), '^_+|_+$|_(?=_)', '', 'g') as database_schema
-		, regexp_replace(regexp_replace(lower(concat(ds.dataset_name)), '\W','_', 'g'), '^_+|_+$|_(?=_)', '', 'g') as table_name
-		, ds.data_source_uuid as data_source_id
-from data_source ds
-inner join variable_source vs
-on ds.data_source_uuid = vs.data_source_uuid
-and ds.has_attributes=1
-inner join geom_index gi
-on gi.data_source_id = vs.geom_dependency_uuid;
-
--- * - * - * - * - * - * - * - * - * -
 -- VOCABULARY SCHEMA CONSTRUCTION
 -- * - * - * - * - * - * - * - * - * -
 
@@ -100,9 +9,9 @@ CREATE SCHEMA IF NOT EXISTS vocabulary;
 CREATE TABLE vocabulary.concept (
 			concept_id integer NOT NULL,
 			concept_name varchar(255) NOT NULL,
-			domain_id varchar(20) NOT NULL,
-			vocabulary_id varchar(20) NOT NULL,
-			concept_class_id varchar(20) NOT NULL,
+			domain_id varchar(25) NOT NULL,
+			vocabulary_id varchar(25) NOT NULL,
+			concept_class_id varchar(25) NOT NULL,
 			standard_concept varchar(1) NULL,
 			concept_code varchar(50) NOT NULL,
 			valid_start_date date NOT NULL,
@@ -110,36 +19,36 @@ CREATE TABLE vocabulary.concept (
 			invalid_reason varchar(1) NULL );
 
 CREATE TABLE vocabulary.vocabulary (
-			vocabulary_id varchar(20) NOT NULL,
+			vocabulary_id varchar(25) NOT NULL,
 			vocabulary_name varchar(255) NOT NULL,
 			vocabulary_reference varchar(255) NULL,
 			vocabulary_version varchar(255) NULL,
 			vocabulary_concept_id integer NOT NULL );
 
 CREATE TABLE vocabulary.domain (
-			domain_id varchar(20) NOT NULL,
+			domain_id varchar(25) NOT NULL,
 			domain_name varchar(255) NOT NULL,
 			domain_concept_id integer NOT NULL );
 
 CREATE TABLE vocabulary.concept_class (
-			concept_class_id varchar(20) NOT NULL,
+			concept_class_id varchar(25) NOT NULL,
 			concept_class_name varchar(255) NOT NULL,
 			concept_class_concept_id integer NOT NULL );
 
 CREATE TABLE vocabulary.concept_relationship (
 			concept_id_1 integer NOT NULL,
 			concept_id_2 integer NOT NULL,
-			relationship_id varchar(20) NOT NULL,
+			relationship_id varchar(25) NOT NULL,
 			valid_start_date date NOT NULL,
 			valid_end_date date NOT NULL,
 			invalid_reason varchar(1) NULL );
 
 CREATE TABLE vocabulary.relationship (
-			relationship_id varchar(20) NOT NULL,
+			relationship_id varchar(25) NOT NULL,
 			relationship_name varchar(255) NOT NULL,
 			is_hierarchical varchar(1) NOT NULL,
 			defines_ancestry varchar(1) NOT NULL,
-			reverse_relationship_id varchar(20) NOT NULL,
+			reverse_relationship_id varchar(25) NOT NULL,
 			relationship_concept_id integer NOT NULL );
 
 CREATE TABLE vocabulary.concept_synonym (
@@ -156,10 +65,10 @@ CREATE TABLE vocabulary.concept_ancestor (
 CREATE TABLE vocabulary.source_to_concept_map (
 			source_code varchar(50) NOT NULL,
 			source_concept_id integer NOT NULL,
-			source_vocabulary_id varchar(20) NOT NULL,
+			source_vocabulary_id varchar(25) NOT NULL,
 			source_code_description varchar(255) NULL,
 			target_concept_id integer NOT NULL,
-			target_vocabulary_id varchar(20) NOT NULL,
+			target_vocabulary_id varchar(25) NOT NULL,
 			valid_start_date date NOT NULL,
 			valid_end_date date NOT NULL,
 			invalid_reason varchar(1) NULL );
@@ -179,7 +88,7 @@ CREATE TABLE vocabulary.drug_strength (
 			invalid_reason varchar(1) NULL );
 
 CREATE TABLE vocabulary.temp_vocabulary_data (
-    vocabulary_id varchar(20) NOT NULL,
+    vocabulary_id varchar(25) NOT NULL,
     vocabulary_name varchar(255) NULL,
     vocabulary_reference varchar(255) NULL,
     vocabulary_version varchar(255) NULL,
@@ -211,7 +120,7 @@ INSERT INTO vocabulary.vocabulary SELECT * FROM vocabulary.temp_vocabulary_data 
 
 -- ADD CONCEPT_CLASSES
 CREATE TABLE vocabulary.temp_concept_class_data (
-    concept_class_id varchar(20) NOT NULL,
+    concept_class_id varchar(25) NOT NULL,
     concept_class_name varchar(255) NULL,
     concept_class_concept_id int4 NULL
 );
@@ -238,7 +147,7 @@ INSERT INTO vocabulary.concept_class SELECT * FROM vocabulary.temp_concept_class
 
 -- ADD DOMAINS
 CREATE TABLE vocabulary.temp_domain_data (
-    domain_id varchar(20) NOT NULL,
+    domain_id varchar(25) NOT NULL,
     domain_name varchar(255) NULL,
     domain_concept_id int4 NULL
 );
@@ -294,11 +203,11 @@ FROM vocabulary.temp_concept_data
 
 -- ADD RELATIONSHIPS
 CREATE TABLE vocabulary.temp_relationship_data (
-    relationship_id varchar(20) NOT NULL,
+    relationship_id varchar(25) NOT NULL,
 	relationship_name varchar(255) NULL,
 	is_hierarchical varchar(1) NULL,
 	defines_ancestry varchar(1) NULL,
-	reverse_relationship_id varchar(20) NULL,
+	reverse_relationship_id varchar(25) NULL,
 	relationship_concept_id int4 NULL
 );
 \COPY vocabulary.temp_relationship_data FROM '/csv/gis_relationship_fragment.csv' DELIMITER ',' CSV HEADER;
@@ -321,10 +230,6 @@ INSERT INTO vocabulary.relationship SELECT * FROM vocabulary.temp_relationship_d
 CREATE TABLE vocabulary.temp_concept_relationship_data (
     concept_id_1 int4 NULL,
     concept_id_2 int4 NULL,
-    concept_code_1 text NULL,
-    concept_code_2 text NULL,
-    vocabulary_id_1 text NULL,
-    vocabulary_id_2 text NULL,
     relationship_id text NULL,
     valid_start_date date NULL,
     valid_end_date date NULL,
