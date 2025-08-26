@@ -1,5 +1,8 @@
 -- * - * - * - * - * - * - * - * - * -
 -- FUNCTION gaia_load_variables()
+--   Create entries in the geom_index and attr_index tables and then
+--   create instances of the geom_template and attr_template tables for
+--   the given dataset and variable parameters.
 -- * - * - * - * - * - * - * - * - * -
 
 -- FUNCTION: gaia.gaia_load_variable(character varying, character varying, character varying, character varying, character varying, character varying, character varying, character varying, character varying, character varying, integer, numeric, numeric, date, date, integer)

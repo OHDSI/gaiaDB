@@ -1,5 +1,8 @@
 -- * - * - * - * - * - * - * - * - * -
 -- VOCABULARY SCHEMA CONSTRUCTION
+-- 
+--   *** FAILING LINE 288 ***
+--
 -- * - * - * - * - * - * - * - * - * -
 
 -- ADD VOCABULARIES
