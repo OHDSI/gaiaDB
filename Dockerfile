@@ -52,7 +52,7 @@ COPY init.sql /docker-entrypoint-initdb.d/init.sql
 # Default environment variables
 ENV POSTGRES_DB=gaiacore
 ENV POSTGRES_USER=postgres
-ENV POSTGRES_PASSWORD=postgres
+# ENV POSTGRES_PASSWORD=postgres
 
 # Expose PostgreSQL port
 EXPOSE 5432

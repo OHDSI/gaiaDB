@@ -351,206 +351,206 @@ CREATE TABLE vocabulary.temp_vocabulary_data (
     vocabulary_version varchar(255) NULL,
     vocabulary_concept_id int4 NULL
 );
-
--- Load initial vocabulary data from CSV files
-\COPY vocabulary.temp_vocabulary_data FROM '/csv/gis_vocabulary_fragment.csv' DELIMITER ',' CSV HEADER;
-
--- Insert new vocabulary concept_ids (that are not in vocabulary) into concept table
-INSERT INTO vocabulary.concept
-SELECT vocabulary_concept_id AS concept_id
-    , vocabulary_name AS concept_name
-    , 'Metadata' AS domain_id
-    , 'Vocabulary' AS vocabulary_id
-    , 'Vocabulary' AS concept_class_id
-    , NULL AS standard_concept
-    , 'OMOP generated' AS concept_code
-    , '1970-01-01' AS valid_start_date
-    , '2099-12-31' AS valid_end_date
-    , NULL AS invalid_reason
-FROM vocabulary.temp_vocabulary_data
-WHERE vocabulary_id NOT IN (
-    SELECT vocabulary_id
-    FROM vocabulary.vocabulary
-);
-
-INSERT INTO vocabulary.vocabulary
-SELECT * FROM vocabulary.temp_vocabulary_data
-WHERE vocabulary_id NOT IN (SELECT vocabulary_id FROM vocabulary.vocabulary);
-
--- ADD CONCEPT_CLASSES
-CREATE TABLE vocabulary.temp_concept_class_data (
-    concept_class_id varchar(20) NOT NULL,
-    concept_class_name varchar(255) NULL,
-    concept_class_concept_id int4 NULL
-);
-
-\COPY vocabulary.temp_concept_class_data FROM '/csv/gis_concept_class_fragment.csv' DELIMITER ',' CSV HEADER;
-
-INSERT INTO vocabulary.concept
-SELECT concept_class_concept_id AS concept_id
-    , concept_class_name AS concept_name
-    , 'Metadata' AS domain_id
-    , 'Concept Class' AS vocabulary_id
-    , 'Concept Class' AS concept_class_id
-    , NULL AS standard_concept
-    , 'OMOP generated' AS concept_code
-    , '1970-01-01' AS valid_start_date
-    , '2099-12-31' AS valid_end_date
-    , NULL AS invalid_reason
-FROM vocabulary.temp_concept_class_data
-WHERE concept_class_id NOT IN (
-    SELECT concept_class_id
-    FROM vocabulary.concept_class
-);
-
-INSERT INTO vocabulary.concept_class
-SELECT * FROM vocabulary.temp_concept_class_data
-WHERE concept_class_id NOT IN (SELECT concept_class_id FROM vocabulary.concept_class);
-
--- ADD DOMAINS
-CREATE TABLE vocabulary.temp_domain_data (
-    domain_id varchar(20) NOT NULL,
-    domain_name varchar(255) NULL,
-    domain_concept_id int4 NULL
-);
-
-\COPY vocabulary.temp_domain_data FROM '/csv/gis_domain_fragment.csv' DELIMITER ',' CSV HEADER;
-
-INSERT INTO vocabulary.concept
-SELECT domain_concept_id AS concept_id
-    , domain_name AS concept_name
-    , 'Metadata' AS domain_id
-    , 'Domain' AS vocabulary_id
-    , 'Domain' AS concept_class_id
-    , NULL AS standard_concept
-    , 'OMOP generated' AS concept_code
-    , '1970-01-01' AS valid_start_date
-    , '2099-12-31' AS valid_end_date
-    , NULL AS invalid_reason
-FROM vocabulary.temp_domain_data
-WHERE domain_id NOT IN (
-    SELECT domain_id
-    FROM vocabulary.domain
-);
-
-INSERT INTO vocabulary.domain
-SELECT * FROM vocabulary.temp_domain_data
-WHERE domain_id NOT IN (SELECT domain_id FROM vocabulary.domain);
-
--- ADD CONCEPTS
-CREATE TABLE vocabulary.temp_concept_data (
-    concept_id integer NULL,
-    concept_name text NULL,
-    domain_id text NULL,
-    vocabulary_id text NULL,
-    concept_class_id text NULL,
-    standard_concept text NULL,
-    concept_code text NULL,
-    valid_start_date date NULL,
-    valid_end_date date NULL,
-    invalid_reason text NULL
-);
-
-\COPY vocabulary.temp_concept_data FROM '/csv/gis_concept_fragment.csv' DELIMITER ',' CSV HEADER;
-
-INSERT INTO vocabulary.concept
-SELECT concept_id
-    , LEFT(concept_name, 255)
-    , domain_id
-    , vocabulary_id
-    , concept_class_id
-    , standard_concept
-    , concept_code
-    , valid_start_date
-    , valid_end_date
-    , invalid_reason
-FROM vocabulary.temp_concept_data;
-
--- ADD RELATIONSHIPS
-CREATE TABLE vocabulary.temp_relationship_data (
-    relationship_id varchar(20) NOT NULL,
-    relationship_name varchar(255) NULL,
-    is_hierarchical varchar(1) NULL,
-    defines_ancestry varchar(1) NULL,
-    reverse_relationship_id varchar(20) NULL,
-    relationship_concept_id int4 NULL
-);
-
-\COPY vocabulary.temp_relationship_data FROM '/csv/gis_relationship_fragment.csv' DELIMITER ',' CSV HEADER;
-
-INSERT INTO vocabulary.concept
-SELECT relationship_concept_id AS concept_id
-    , relationship_name AS concept_name
-    , 'Metadata' AS domain_id
-    , 'Relationship' AS vocabulary_id
-    , 'Relationship' AS concept_class_id
-    , NULL AS standard_concept
-    , 'OMOP generated' AS concept_code
-    , '1970-01-01' AS valid_start_date
-    , '2099-12-31' AS valid_end_date
-    , NULL AS invalid_reason
-FROM vocabulary.temp_relationship_data;
-
-INSERT INTO vocabulary.relationship
-SELECT * FROM vocabulary.temp_relationship_data;
-
--- ADD CONCEPT_RELATIONSHIPS
-CREATE TABLE vocabulary.temp_concept_relationship_data (
-    concept_id_1 int4 NULL,
-    concept_id_2 int4 NULL,
-    concept_code_1 text NULL,
-    concept_code_2 text NULL,
-    vocabulary_id_1 text NULL,
-    vocabulary_id_2 text NULL,
-    relationship_id text NULL,
-    valid_start_date date NULL,
-    valid_end_date date NULL,
-    invalid_reason text NULL
-);
-
-\COPY vocabulary.temp_concept_relationship_data FROM '/csv/gis_concept_relationship_fragment.csv' DELIMITER ',' CSV HEADER;
-
-INSERT INTO vocabulary.concept_relationship
-SELECT concept_id_1
-    , concept_id_2
-    , relationship_id
-    , valid_start_date
-    , valid_end_date
-    , invalid_reason
-FROM vocabulary.temp_concept_relationship_data;
-
--- ADD REVERSE CONCEPT_RELATIONSHIPS (WHERE MISSING)
-INSERT INTO vocabulary.concept_relationship
-SELECT rev.*
-FROM (
-    SELECT cr.concept_id_2 as concept_id_1
-        , cr.concept_id_1 as concept_id_2
-        , r.reverse_relationship_id as relationship_id
-        , cr.valid_start_date
-        , cr.valid_end_date
-        , cr.invalid_reason
-    FROM vocabulary.concept_relationship cr
-    INNER JOIN vocabulary.relationship r
-        ON cr.relationship_id = r.relationship_id
-        AND cr.concept_id_1 > 2000000000
-) rev
-LEFT JOIN (
-    SELECT *
-    FROM vocabulary.concept_relationship
-    WHERE concept_id_1 > 2000000000
-) orig
-    ON rev.concept_id_1 = orig.concept_id_1
-    AND rev.concept_id_2 = orig.concept_id_2
-    AND rev.relationship_id = orig.relationship_id
-WHERE orig.concept_id_1 IS NULL;
-
--- Drop all temporary tables
-DROP TABLE vocabulary.temp_concept_data;
-DROP TABLE vocabulary.temp_concept_relationship_data;
-DROP TABLE vocabulary.temp_concept_class_data;
-DROP TABLE vocabulary.temp_domain_data;
-DROP TABLE vocabulary.temp_relationship_data;
-DROP TABLE vocabulary.temp_vocabulary_data;
+--
+-- -- Load initial vocabulary data from CSV files
+-- \COPY vocabulary.temp_vocabulary_data FROM '/csv/gis_vocabulary_fragment.csv' DELIMITER ',' CSV HEADER;
+--
+-- -- Insert new vocabulary concept_ids (that are not in vocabulary) into concept table
+-- INSERT INTO vocabulary.concept
+-- SELECT vocabulary_concept_id AS concept_id
+--     , vocabulary_name AS concept_name
+--     , 'Metadata' AS domain_id
+--     , 'Vocabulary' AS vocabulary_id
+--     , 'Vocabulary' AS concept_class_id
+--     , NULL AS standard_concept
+--     , 'OMOP generated' AS concept_code
+--     , '1970-01-01' AS valid_start_date
+--     , '2099-12-31' AS valid_end_date
+--     , NULL AS invalid_reason
+-- FROM vocabulary.temp_vocabulary_data
+-- WHERE vocabulary_id NOT IN (
+--     SELECT vocabulary_id
+--     FROM vocabulary.vocabulary
+-- );
+--
+-- INSERT INTO vocabulary.vocabulary
+-- SELECT * FROM vocabulary.temp_vocabulary_data
+-- WHERE vocabulary_id NOT IN (SELECT vocabulary_id FROM vocabulary.vocabulary);
+--
+-- -- ADD CONCEPT_CLASSES
+-- CREATE TABLE vocabulary.temp_concept_class_data (
+--     concept_class_id varchar(20) NOT NULL,
+--     concept_class_name varchar(255) NULL,
+--     concept_class_concept_id int4 NULL
+-- );
+--
+-- \COPY vocabulary.temp_concept_class_data FROM '/csv/gis_concept_class_fragment.csv' DELIMITER ',' CSV HEADER;
+--
+-- INSERT INTO vocabulary.concept
+-- SELECT concept_class_concept_id AS concept_id
+--     , concept_class_name AS concept_name
+--     , 'Metadata' AS domain_id
+--     , 'Concept Class' AS vocabulary_id
+--     , 'Concept Class' AS concept_class_id
+--     , NULL AS standard_concept
+--     , 'OMOP generated' AS concept_code
+--     , '1970-01-01' AS valid_start_date
+--     , '2099-12-31' AS valid_end_date
+--     , NULL AS invalid_reason
+-- FROM vocabulary.temp_concept_class_data
+-- WHERE concept_class_id NOT IN (
+--     SELECT concept_class_id
+--     FROM vocabulary.concept_class
+-- );
+--
+-- INSERT INTO vocabulary.concept_class
+-- SELECT * FROM vocabulary.temp_concept_class_data
+-- WHERE concept_class_id NOT IN (SELECT concept_class_id FROM vocabulary.concept_class);
+--
+-- -- ADD DOMAINS
+-- CREATE TABLE vocabulary.temp_domain_data (
+--     domain_id varchar(20) NOT NULL,
+--     domain_name varchar(255) NULL,
+--     domain_concept_id int4 NULL
+-- );
+--
+-- \COPY vocabulary.temp_domain_data FROM '/csv/gis_domain_fragment.csv' DELIMITER ',' CSV HEADER;
+--
+-- INSERT INTO vocabulary.concept
+-- SELECT domain_concept_id AS concept_id
+--     , domain_name AS concept_name
+--     , 'Metadata' AS domain_id
+--     , 'Domain' AS vocabulary_id
+--     , 'Domain' AS concept_class_id
+--     , NULL AS standard_concept
+--     , 'OMOP generated' AS concept_code
+--     , '1970-01-01' AS valid_start_date
+--     , '2099-12-31' AS valid_end_date
+--     , NULL AS invalid_reason
+-- FROM vocabulary.temp_domain_data
+-- WHERE domain_id NOT IN (
+--     SELECT domain_id
+--     FROM vocabulary.domain
+-- );
+--
+-- INSERT INTO vocabulary.domain
+-- SELECT * FROM vocabulary.temp_domain_data
+-- WHERE domain_id NOT IN (SELECT domain_id FROM vocabulary.domain);
+--
+-- -- ADD CONCEPTS
+-- CREATE TABLE vocabulary.temp_concept_data (
+--     concept_id integer NULL,
+--     concept_name text NULL,
+--     domain_id text NULL,
+--     vocabulary_id text NULL,
+--     concept_class_id text NULL,
+--     standard_concept text NULL,
+--     concept_code text NULL,
+--     valid_start_date date NULL,
+--     valid_end_date date NULL,
+--     invalid_reason text NULL
+-- );
+--
+-- \COPY vocabulary.temp_concept_data FROM '/csv/gis_concept_fragment.csv' DELIMITER ',' CSV HEADER;
+--
+-- INSERT INTO vocabulary.concept
+-- SELECT concept_id
+--     , LEFT(concept_name, 255)
+--     , domain_id
+--     , vocabulary_id
+--     , concept_class_id
+--     , standard_concept
+--     , concept_code
+--     , valid_start_date
+--     , valid_end_date
+--     , invalid_reason
+-- FROM vocabulary.temp_concept_data;
+--
+-- -- ADD RELATIONSHIPS
+-- CREATE TABLE vocabulary.temp_relationship_data (
+--     relationship_id varchar(20) NOT NULL,
+--     relationship_name varchar(255) NULL,
+--     is_hierarchical varchar(1) NULL,
+--     defines_ancestry varchar(1) NULL,
+--     reverse_relationship_id varchar(20) NULL,
+--     relationship_concept_id int4 NULL
+-- );
+--
+-- \COPY vocabulary.temp_relationship_data FROM '/csv/gis_relationship_fragment.csv' DELIMITER ',' CSV HEADER;
+--
+-- INSERT INTO vocabulary.concept
+-- SELECT relationship_concept_id AS concept_id
+--     , relationship_name AS concept_name
+--     , 'Metadata' AS domain_id
+--     , 'Relationship' AS vocabulary_id
+--     , 'Relationship' AS concept_class_id
+--     , NULL AS standard_concept
+--     , 'OMOP generated' AS concept_code
+--     , '1970-01-01' AS valid_start_date
+--     , '2099-12-31' AS valid_end_date
+--     , NULL AS invalid_reason
+-- FROM vocabulary.temp_relationship_data;
+--
+-- INSERT INTO vocabulary.relationship
+-- SELECT * FROM vocabulary.temp_relationship_data;
+--
+-- -- ADD CONCEPT_RELATIONSHIPS
+-- CREATE TABLE vocabulary.temp_concept_relationship_data (
+--     concept_id_1 int4 NULL,
+--     concept_id_2 int4 NULL,
+--     concept_code_1 text NULL,
+--     concept_code_2 text NULL,
+--     vocabulary_id_1 text NULL,
+--     vocabulary_id_2 text NULL,
+--     relationship_id text NULL,
+--     valid_start_date date NULL,
+--     valid_end_date date NULL,
+--     invalid_reason text NULL
+-- );
+--
+-- \COPY vocabulary.temp_concept_relationship_data FROM '/csv/gis_concept_relationship_fragment.csv' DELIMITER ',' CSV HEADER;
+--
+-- INSERT INTO vocabulary.concept_relationship
+-- SELECT concept_id_1
+--     , concept_id_2
+--     , relationship_id
+--     , valid_start_date
+--     , valid_end_date
+--     , invalid_reason
+-- FROM vocabulary.temp_concept_relationship_data;
+--
+-- -- ADD REVERSE CONCEPT_RELATIONSHIPS (WHERE MISSING)
+-- INSERT INTO vocabulary.concept_relationship
+-- SELECT rev.*
+-- FROM (
+--     SELECT cr.concept_id_2 as concept_id_1
+--         , cr.concept_id_1 as concept_id_2
+--         , r.reverse_relationship_id as relationship_id
+--         , cr.valid_start_date
+--         , cr.valid_end_date
+--         , cr.invalid_reason
+--     FROM vocabulary.concept_relationship cr
+--     INNER JOIN vocabulary.relationship r
+--         ON cr.relationship_id = r.relationship_id
+--         AND cr.concept_id_1 > 2000000000
+-- ) rev
+-- LEFT JOIN (
+--     SELECT *
+--     FROM vocabulary.concept_relationship
+--     WHERE concept_id_1 > 2000000000
+-- ) orig
+--     ON rev.concept_id_1 = orig.concept_id_1
+--     AND rev.concept_id_2 = orig.concept_id_2
+--     AND rev.relationship_id = orig.relationship_id
+-- WHERE orig.concept_id_1 IS NULL;
+--
+-- -- Drop all temporary tables
+-- DROP TABLE vocabulary.temp_concept_data;
+-- DROP TABLE vocabulary.temp_concept_relationship_data;
+-- DROP TABLE vocabulary.temp_concept_class_data;
+-- DROP TABLE vocabulary.temp_domain_data;
+-- DROP TABLE vocabulary.temp_relationship_data;
+-- DROP TABLE vocabulary.temp_vocabulary_data;
 
 -- Add primary keys
 ALTER TABLE vocabulary.concept
