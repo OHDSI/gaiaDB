@@ -1,6 +1,7 @@
 FROM postgis/postgis:16-3.4-alpine
 
 # Install required packages for gaiaCore functionality
+# TODO check what is still needed - some of this looks redundant
 RUN apk add --no-cache \
     libintl \
     gdal \
@@ -28,12 +29,8 @@ RUN cd /tmp && \
     cd / && \
     rm -rf /tmp/plsh
 
-# Create directories
+# Create directory
 RUN mkdir -p /csv /sql
-
-# Copy CSV files for initial data load
-COPY csv/data_source.csv /csv/data_source.csv
-COPY csv/variable_source.csv /csv/variable_source.csv
 
 # Download vocabulary CSV files from CVB repository
 RUN wget -O /csv/gis_vocabulary_fragment.csv https://raw.githubusercontent.com/TuftsCTSI/CVB/refs/heads/main/GIS/Ontology/vocabulary_delta.csv
@@ -43,16 +40,16 @@ RUN wget -O /csv/gis_concept_fragment.csv https://raw.githubusercontent.com/Tuft
 RUN wget -O /csv/gis_relationship_fragment.csv https://raw.githubusercontent.com/TuftsCTSI/CVB/refs/heads/main/GIS/Ontology/relationship_delta.csv
 RUN wget -O /csv/gis_concept_relationship_fragment.csv https://raw.githubusercontent.com/TuftsCTSI/CVB/refs/heads/main/GIS/Ontology/concept_relationship_delta.csv
 
-# Copy SQL function files
+# Copy SQL db function files
 COPY sql/*.sql /sql/
 
-# Copy initialization script
-COPY init.sql /docker-entrypoint-initdb.d/init.sql
+# Copy db initialization scripts
+COPY init/*.* /docker-entrypoint-initdb.d/
 
-# Default environment variables
-ENV POSTGRES_DB=gaiacore
-ENV POSTGRES_USER=postgres
-# ENV POSTGRES_PASSWORD=postgres
+# copy entrypoint script
+COPY --chmod=0755 docker-gaiadb-entrypoint.sh /usr/local/bin/
+ENTRYPOINT ["/usr/local/bin/docker-gaiadb-entrypoint.sh"]
 
-# Expose PostgreSQL port
+# Expose PostgreSQL port and start postgres
 EXPOSE 5432
+CMD ["postgres"]
