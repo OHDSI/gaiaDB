@@ -1,43 +1,63 @@
 -- JSON-LD Ingestion Functions
--- Functions to parse and load JSON-LD metadata and data into PostgreSQL
+-- Parse and load JSON-LD metadata and variable definitions into backbone tables.
 
--- Function to ingest JSON-LD metadata into data_source table
+-- ---------------------------------------------------------------------------
+-- backbone.ingest_jsonld_metadata
+-- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION backbone.ingest_jsonld_metadata(jsonld_data JSONB)
 RETURNS UUID AS $$
 DECLARE
-    v_data_source_uuid UUID;
-    v_dataset_id TEXT;
-    v_creator_array TEXT[];
-    v_provider_array TEXT[];
-    v_keywords_array TEXT[];
+    v_data_source_uuid   UUID;
+    v_dataset_id         TEXT;
+    v_creator_array      TEXT[];
+    v_provider_array     TEXT[];
+    v_keywords_array     TEXT[];
     v_measurement_technique JSONB;
-    v_additional_props JSONB;
+    v_additional_props   JSONB;
+    v_geom_type          TEXT;
+    v_srid               INTEGER;
 BEGIN
-    -- Extract dataset ID from @id field
     v_dataset_id := jsonld_data->>'@id';
 
-    -- Extract creator array
     SELECT ARRAY_AGG(value->>'name')
     INTO v_creator_array
     FROM jsonb_array_elements(jsonld_data->'creator') AS value;
 
-    -- Extract provider array
     SELECT ARRAY_AGG(value)
     INTO v_provider_array
     FROM jsonb_array_elements_text(jsonld_data->'provider') AS value;
 
-    -- Extract keywords
     SELECT ARRAY_AGG(value)
     INTO v_keywords_array
     FROM jsonb_array_elements_text(jsonld_data->'keywords') AS value;
 
-    -- Extract measurement technique
     v_measurement_technique := jsonld_data->'measurementTechnique';
+    v_additional_props      := jsonld_data->'additionalProperty';
 
-    -- Extract additional properties
-    v_additional_props := jsonld_data->'additionalProperty';
+    -- Geometry type: read from the 'vectorGeometry' DefinedTermSet in measurementTechnique.
+    -- Falls back to the top-level 'type' key if the term is absent.
+    SELECT elem->>'termCode'
+    INTO v_geom_type
+    FROM jsonb_array_elements(jsonld_data->'measurementTechnique') AS elem
+    WHERE elem->'inDefinedTermSet'->>'name' = 'vectorGeometry'
+    LIMIT 1;
 
-    -- Insert or update data source
+    IF v_geom_type IS NULL THEN
+        v_geom_type := jsonld_data->>'type';
+    END IF;
+
+    -- SRID: extract numeric code from the Spatial_reference_system additionalProperty value
+    -- e.g. "https://epsg.io/4269" → 4269
+    BEGIN
+        SELECT regexp_replace(elem->>'value', '^[^0-9]*([0-9]+)[^0-9]*$', '\1')::INTEGER
+        INTO v_srid
+        FROM jsonb_array_elements(jsonld_data->'additionalProperty') AS elem
+        WHERE elem->>'propertyID' LIKE '%Spatial_reference_system%'
+        LIMIT 1;
+    EXCEPTION WHEN OTHERS THEN
+        v_srid := 4326;
+    END;
+
     INSERT INTO backbone.data_source (
         dataset_id,
         dataset_name,
@@ -54,6 +74,7 @@ BEGIN
         measurement_technique,
         additional_properties,
         geom_type,
+        srid,
         etl_metadata
     ) VALUES (
         v_dataset_id,
@@ -70,15 +91,18 @@ BEGIN
         jsonld_data->>'url',
         v_measurement_technique,
         v_additional_props,
-        jsonld_data->>'type',
+        v_geom_type,
+        COALESCE(v_srid, 4326),
         jsonld_data->'about'
     )
     ON CONFLICT (dataset_id) DO UPDATE SET
-        dataset_name = EXCLUDED.dataset_name,
-        dataset_version = EXCLUDED.dataset_version,
-        description = EXCLUDED.description,
-        date_modified = EXCLUDED.date_modified,
-        updated_at = NOW()
+        dataset_name        = EXCLUDED.dataset_name,
+        dataset_version     = EXCLUDED.dataset_version,
+        description         = EXCLUDED.description,
+        geom_type           = EXCLUDED.geom_type,
+        srid                = EXCLUDED.srid,
+        date_modified       = EXCLUDED.date_modified,
+        updated_at          = NOW()
     RETURNING data_source_uuid INTO v_data_source_uuid;
 
     RAISE NOTICE 'Ingested data source: % (UUID: %)', jsonld_data->>'name', v_data_source_uuid;
@@ -87,43 +111,52 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Function to ingest variable metadata from JSON-LD
+
+-- ---------------------------------------------------------------------------
+-- backbone.ingest_jsonld_variables
+-- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION backbone.ingest_jsonld_variables(
-    jsonld_data JSONB,
+    jsonld_data       JSONB,
     p_data_source_uuid UUID
 )
 RETURNS INTEGER AS $$
 DECLARE
-    v_variable JSONB;
-    v_count INTEGER := 0;
-    v_property_id TEXT;
-    v_start_date DATE;
-    v_end_date DATE;
+    v_variable        JSONB;
+    v_count           INTEGER := 0;
+    v_property_id     TEXT;
+    v_attr_concept_id INTEGER;
+    v_start_date      DATE;
+    v_end_date        DATE;
 BEGIN
-    -- Loop through variableMeasured array
     FOR v_variable IN SELECT * FROM jsonb_array_elements(jsonld_data->'variableMeasured')
     LOOP
-        -- Extract propertyID (may be an array, take first element)
+        -- propertyID is typically an array; use ->> to get plain text without JSON quotes
         IF jsonb_typeof(v_variable->'propertyID') = 'array' THEN
-            v_property_id := v_variable->'propertyID'->0;
+            v_property_id := v_variable->'propertyID'->>0;
         ELSE
             v_property_id := v_variable->>'propertyID';
         END IF;
 
-        -- Parse dates if present
+        -- Attempt to interpret the propertyID as an OHDSI concept_id integer
         BEGIN
-            v_start_date := TO_DATE(v_variable->>'startDate', 'MM/DD/YY');
+            v_attr_concept_id := NULLIF(v_property_id, '')::INTEGER;
+        EXCEPTION WHEN OTHERS THEN
+            v_attr_concept_id := NULL;
+        END;
+
+        -- Dates are stored in ISO format (YYYY-MM-DD) in the JSON-LD
+        BEGIN
+            v_start_date := (v_variable->>'startDate')::DATE;
         EXCEPTION WHEN OTHERS THEN
             v_start_date := NULL;
         END;
 
         BEGIN
-            v_end_date := TO_DATE(v_variable->>'endDate', 'MM/DD/YY');
+            v_end_date := (v_variable->>'endDate')::DATE;
         EXCEPTION WHEN OTHERS THEN
             v_end_date := NULL;
         END;
 
-        -- Insert variable
         INSERT INTO backbone.variable_source (
             data_source_uuid,
             variable_name,
@@ -135,25 +168,29 @@ BEGIN
             min_value,
             max_value,
             start_date,
-            end_date
+            end_date,
+            attr_concept_id
         ) VALUES (
             p_data_source_uuid,
             v_variable->>'name',
             v_variable->>'description',
             v_property_id,
-            v_variable->'qudt:dataType',
+            v_variable->>'qudt:dataType',
             v_variable->>'unitCode',
             v_variable->>'unitText',
-            (v_variable->>'minValue')::NUMERIC,
-            (v_variable->>'maxValue')::NUMERIC,
+            -- Guard against empty-string minValue/maxValue
+            NULLIF(v_variable->>'minValue', '')::NUMERIC,
+            NULLIF(v_variable->>'maxValue', '')::NUMERIC,
             v_start_date,
-            v_end_date
+            v_end_date,
+            v_attr_concept_id
         )
         ON CONFLICT (data_source_uuid, variable_name) DO UPDATE SET
             variable_description = EXCLUDED.variable_description,
-            unit_text = EXCLUDED.unit_text,
-            min_value = EXCLUDED.min_value,
-            max_value = EXCLUDED.max_value;
+            unit_text            = EXCLUDED.unit_text,
+            min_value            = EXCLUDED.min_value,
+            max_value            = EXCLUDED.max_value,
+            attr_concept_id      = EXCLUDED.attr_concept_id;
 
         v_count := v_count + 1;
     END LOOP;
@@ -164,76 +201,77 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Main function to process JSON-LD file
+
+-- ---------------------------------------------------------------------------
+-- backbone.load_jsonld_file  –  parse JSON text and run both ingest steps
+-- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION backbone.load_jsonld_file(jsonld_text TEXT)
 RETURNS TABLE(
     data_source_uuid UUID,
-    dataset_name TEXT,
+    dataset_name     TEXT,
     variables_loaded INTEGER
 ) AS $$
 DECLARE
-    v_jsonld JSONB;
+    v_jsonld          JSONB;
     v_data_source_uuid UUID;
-    v_var_count INTEGER;
-    v_dataset_name TEXT;
+    v_var_count       INTEGER;
+    v_dataset_name    TEXT;
 BEGIN
-    -- Parse JSON-LD text
     BEGIN
         v_jsonld := jsonld_text::JSONB;
     EXCEPTION WHEN OTHERS THEN
-        RAISE EXCEPTION 'Invalid JSON-LD format: %', SQLERRM;
+        RAISE EXCEPTION 'Invalid JSON-LD: %', SQLERRM;
     END;
 
-    -- Ingest metadata
     v_data_source_uuid := backbone.ingest_jsonld_metadata(v_jsonld);
-    v_dataset_name := v_jsonld->>'name';
-
-    -- Ingest variables
-    v_var_count := backbone.ingest_jsonld_variables(v_jsonld, v_data_source_uuid);
+    v_dataset_name     := v_jsonld->>'name';
+    v_var_count        := backbone.ingest_jsonld_variables(v_jsonld, v_data_source_uuid);
 
     RETURN QUERY SELECT v_data_source_uuid, v_dataset_name, v_var_count;
 END;
 $$ LANGUAGE plpgsql;
 
--- Helper function to load JSON-LD from file path (requires plsh or similar)
--- This is a placeholder - actual implementation depends on file access method
+
+-- ---------------------------------------------------------------------------
+-- backbone.load_jsonld_from_path  –  read a file and call load_jsonld_file
+-- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION backbone.load_jsonld_from_path(file_path TEXT)
 RETURNS TABLE(
     data_source_uuid UUID,
-    dataset_name TEXT,
+    dataset_name     TEXT,
     variables_loaded INTEGER
 ) AS $$
 DECLARE
-    v_jsonld_content TEXT;
+    v_content TEXT;
 BEGIN
-    -- Read file content (this requires pg_read_file or similar extension)
-    -- For Docker environments, files should be mounted and accessible
     BEGIN
-        v_jsonld_content := pg_read_file(file_path);
+        v_content := pg_read_file(file_path);
     EXCEPTION WHEN OTHERS THEN
-        RAISE EXCEPTION 'Cannot read file %: %', file_path, SQLERRM;
+        RAISE EXCEPTION 'Cannot read %: %', file_path, SQLERRM;
     END;
 
-    -- Process the JSON-LD content
-    RETURN QUERY SELECT * FROM backbone.load_jsonld_file(v_jsonld_content);
+    RETURN QUERY SELECT * FROM backbone.load_jsonld_file(v_content);
 END;
 $$ LANGUAGE plpgsql;
 
--- Function to create a dynamic data source table from JSON-LD structure
+
+-- ---------------------------------------------------------------------------
+-- backbone.create_datasource_table
+-- Dynamically creates a staging table from variable_source definitions.
+-- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION backbone.create_datasource_table(
     p_data_source_uuid UUID,
-    p_schema_name TEXT DEFAULT 'public'
+    p_schema_name      TEXT DEFAULT 'public'
 )
 RETURNS TEXT AS $$
 DECLARE
-    v_table_name TEXT;
+    v_table_name  TEXT;
     v_dataset_name TEXT;
-    v_geom_type TEXT;
-    v_create_sql TEXT;
-    v_variable RECORD;
-    v_columns TEXT := '';
+    v_geom_type   TEXT;
+    v_create_sql  TEXT;
+    v_variable    RECORD;
+    v_columns     TEXT := '';
 BEGIN
-    -- Get data source info
     SELECT
         LOWER(REGEXP_REPLACE(dataset_name, '[^a-zA-Z0-9_]', '_', 'g')),
         geom_type,
@@ -246,28 +284,27 @@ BEGIN
         RAISE EXCEPTION 'Data source UUID % not found', p_data_source_uuid;
     END IF;
 
-    -- Build column definitions from variables
     FOR v_variable IN
         SELECT
-            LOWER(REGEXP_REPLACE(variable_name, '[^a-zA-Z0-9_]', '_', 'g')) as col_name,
+            LOWER(REGEXP_REPLACE(variable_name, '[^a-zA-Z0-9_]', '_', 'g')) AS col_name,
             CASE
-                WHEN data_type LIKE '%numeric%' THEN 'NUMERIC'
-                WHEN data_type LIKE '%varchar%' THEN 'TEXT'
-                WHEN data_type LIKE '%int%' THEN 'INTEGER'
+                WHEN data_type ILIKE '%float%' OR data_type = 'float8' OR data_type = 'float4' THEN 'DOUBLE PRECISION'
+                WHEN data_type ILIKE '%int%'   OR data_type = 'int4'   OR data_type = 'int8'   THEN 'INTEGER'
+                WHEN data_type ILIKE '%bool%'                                                   THEN 'BOOLEAN'
+                WHEN data_type ILIKE '%varchar%' OR data_type ILIKE '%text%'                   THEN 'TEXT'
                 ELSE 'TEXT'
-            END as pg_type
+            END AS pg_type
         FROM backbone.variable_source
         WHERE data_source_uuid = p_data_source_uuid
     LOOP
         v_columns := v_columns || format('%I %s, ', v_variable.col_name, v_variable.pg_type);
     END LOOP;
 
-    -- Create table with geometry column
     v_create_sql := format(
         'CREATE TABLE IF NOT EXISTS %I.%I (
             gid SERIAL PRIMARY KEY,
             %s
-            wgs_geom GEOMETRY(GEOMETRY, 4326),
+            wgs_geom   GEOMETRY(GEOMETRY, 4326),
             geom_local GEOMETRY
         )',
         p_schema_name,
@@ -277,9 +314,10 @@ BEGIN
 
     EXECUTE v_create_sql;
 
-    -- Create spatial index
-    EXECUTE format('CREATE INDEX IF NOT EXISTS idx_%I_wgs_geom ON %I.%I USING GIST(wgs_geom)',
-        v_table_name, p_schema_name, v_table_name);
+    EXECUTE format(
+        'CREATE INDEX IF NOT EXISTS idx_%I_wgs_geom ON %I.%I USING GIST(wgs_geom)',
+        v_table_name, p_schema_name, v_table_name
+    );
 
     RAISE NOTICE 'Created table %.% for data source %', p_schema_name, v_table_name, v_dataset_name;
 
@@ -287,63 +325,57 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Helper function to download JSON-LD to temp file
+
+-- ---------------------------------------------------------------------------
+-- backbone.download_jsonld_to_file  (plsh helper)
+-- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION backbone.download_jsonld_to_file(
-    url TEXT,
+    url       TEXT,
     temp_file TEXT DEFAULT '/tmp/jsonld_metadata.json'
 )
 RETURNS TEXT AS $$
 #!/bin/sh
-
-# Download JSON-LD file from URL
-echo "Downloading JSON-LD metadata from $1..."
 curl -s -L -o "$2" "$1"
-
 if [ $? -ne 0 ]; then
-    echo "Error: Download failed"
+    echo "Error: download failed"
     exit 1
 fi
-
 echo "Downloaded to: $2"
 $$ LANGUAGE plsh;
 
--- Function to fetch JSON-LD from URL and load it
+
+-- ---------------------------------------------------------------------------
+-- backbone.fetch_and_load_jsonld  –  download from URL then load
+-- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION backbone.fetch_and_load_jsonld(
-    url TEXT,
+    url       TEXT,
     temp_file TEXT DEFAULT '/tmp/jsonld_metadata.json'
 )
 RETURNS TABLE(
     data_source_uuid UUID,
-    dataset_name TEXT,
+    dataset_name     TEXT,
     variables_loaded INTEGER
 ) AS $$
 DECLARE
-    v_download_result TEXT;
-    v_jsonld_content TEXT;
+    v_content TEXT;
 BEGIN
-    -- Download the JSON-LD file
-    v_download_result := backbone.download_jsonld_to_file(url, temp_file);
+    PERFORM backbone.download_jsonld_to_file(url, temp_file);
 
-    RAISE NOTICE '%', v_download_result;
-
-    -- Read the downloaded file
     BEGIN
-        v_jsonld_content := pg_read_file(temp_file);
+        v_content := pg_read_file(temp_file);
     EXCEPTION WHEN OTHERS THEN
         RAISE EXCEPTION 'Failed to read downloaded file %: %', temp_file, SQLERRM;
     END;
 
-    -- Process the JSON-LD content
-    RETURN QUERY SELECT * FROM backbone.load_jsonld_file(v_jsonld_content);
-
-    -- Note: Cleanup of temp file could be added here with another shell function if needed
+    RETURN QUERY SELECT * FROM backbone.load_jsonld_file(v_content);
 END;
 $$ LANGUAGE plpgsql;
 
-COMMENT ON FUNCTION backbone.ingest_jsonld_metadata IS 'Parses JSON-LD metadata and stores in data_source table';
-COMMENT ON FUNCTION backbone.ingest_jsonld_variables IS 'Extracts variable definitions from JSON-LD and stores in variable_source';
-COMMENT ON FUNCTION backbone.load_jsonld_file IS 'Main entry point to load JSON-LD content from text';
-COMMENT ON FUNCTION backbone.load_jsonld_from_path IS 'Load JSON-LD from file path using pg_read_file';
-COMMENT ON FUNCTION backbone.download_jsonld_to_file IS 'Download JSON-LD file from URL to temporary location';
-COMMENT ON FUNCTION backbone.fetch_and_load_jsonld IS 'Fetch JSON-LD metadata from URL and load into database';
-COMMENT ON FUNCTION backbone.create_datasource_table IS 'Dynamically creates a table structure based on JSON-LD variable definitions';
+
+COMMENT ON FUNCTION backbone.ingest_jsonld_metadata  IS 'Parse JSON-LD top-level metadata into backbone.data_source. Reads geom_type from measurementTechnique and SRID from additionalProperty.';
+COMMENT ON FUNCTION backbone.ingest_jsonld_variables IS 'Parse variableMeasured array into backbone.variable_source. Sets attr_concept_id from propertyID.';
+COMMENT ON FUNCTION backbone.load_jsonld_file        IS 'Main entry point: parse JSON-LD text and run both ingest steps.';
+COMMENT ON FUNCTION backbone.load_jsonld_from_path   IS 'Load JSON-LD from a file path via pg_read_file.';
+COMMENT ON FUNCTION backbone.create_datasource_table IS 'Dynamically create a staging table from variable_source definitions.';
+COMMENT ON FUNCTION backbone.download_jsonld_to_file IS 'Download a JSON-LD file from a URL.';
+COMMENT ON FUNCTION backbone.fetch_and_load_jsonld   IS 'Download JSON-LD from URL and load into database.';

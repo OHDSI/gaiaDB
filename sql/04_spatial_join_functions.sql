@@ -107,15 +107,12 @@ BEGIN
                 att.unit_concept_id::float::integer AS unit_concept_id
             FROM (
                 SELECT
-                    *,
                     1 AS join_all,
                     %L::integer AS attr_concept_id,
                     %L::date AS attr_start_date,
                     %L::date AS attr_end_date,
                     %L::integer AS unit_concept_id,
                     %L::integer AS value_as_concept_id
-                FROM backbone.variable_source
-                WHERE variable_name = %L
             ) att
             INNER JOIN (
                 SELECT %I, wgs_geom, 1 AS join_all
@@ -142,7 +139,6 @@ BEGIN
             v_attr_end_date,
             v_unit_concept_id,
             v_value_as_concept_id,
-            p_variable_name,  -- WHERE clause
             p_variable_name,  -- SELECT column
             p_data_source_table,  -- FROM table
             p_spatial_operator,  -- spatial operator
@@ -205,15 +201,12 @@ BEGIN
                 att.unit_concept_id::float::integer AS unit_concept_id
             FROM (
                 SELECT
-                    *,
                     1 AS join_all,
                     %L::integer AS attr_concept_id,
                     %L::date AS attr_start_date,
                     %L::date AS attr_end_date,
                     %L::integer AS unit_concept_id,
                     %L::integer AS value_as_concept_id
-                FROM backbone.variable_source
-                WHERE variable_name = %L
             ) att
             INNER JOIN (
                 SELECT a.%I, b.wgs_geom, 1 AS join_all
@@ -241,7 +234,6 @@ BEGIN
             v_attr_end_date,
             v_unit_concept_id,
             v_value_as_concept_id,
-            p_variable_name,  -- WHERE clause
             p_variable_name,  -- SELECT column from data table
             p_data_source_table,  -- FROM data table
             p_geometry_source_table,  -- JOIN geometry table
