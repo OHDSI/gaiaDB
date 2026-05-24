@@ -37,7 +37,10 @@
   ],
   "url": "https://www.atsdr.cdc.gov/place-health/php/svi/svi-data-documentation-download.html",
   "provider": [
-    "CDC"
+    {
+      "@type": "Organization",
+      "name": "CDC"
+    }
   ],
   "spatialCoverage": [
     {
@@ -130,7 +133,7 @@
         "@type": "Action",
         "name": "Pseudo Code",
         "description": "TODO",
-        "resulDataset": {
+        "result": {
           "@type": "Dataset",
           "encodingFormat": "sql",
           "url": "https://gdsc.idsc.miami.edu/download/data/ma_2022_svi_tract/?file=ma_2022_svi_tract&format=sql"
@@ -172,9 +175,7 @@
       "@type": "PropertyValue",
       "name": "area_sqmi",
       "description": "Tract area in square miles",
-      "propertyID": [
-        "2052497175"
-      ],
+      "propertyID": "2052497175",
       "qudt:dataType": "float8",
       "unitText": "square miles"
     },
@@ -182,18 +183,14 @@
       "@type": "PropertyValue",
       "name": "county",
       "description": "County name",
-      "propertyID": [
-        "2052499639"
-      ],
+      "propertyID": "2052499639",
       "qudt:dataType": "varchar"
     },
     {
       "@type": "PropertyValue",
       "name": "e_afam",
       "description": "Adjunct variable - Black/African American, not Hispanic or Latino persons estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052499783"
-      ],
+      "propertyID": "2052499783",
       "qudt:dataType": "int4",
       "unitText": "persons",
       "startDate": "2020-01-01",
@@ -203,9 +200,7 @@
       "@type": "PropertyValue",
       "name": "e_age17",
       "description": "Persons aged 17 and younger estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052498115"
-      ],
+      "propertyID": "2052498115",
       "qudt:dataType": "int4",
       "unitText": "persons",
       "startDate": "2020-01-01",
@@ -215,9 +210,7 @@
       "@type": "PropertyValue",
       "name": "e_age65",
       "description": "Persons aged 65 and older estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052498113"
-      ],
+      "propertyID": "2052498113",
       "qudt:dataType": "int4",
       "unitText": "persons",
       "startDate": "2020-01-01",
@@ -227,9 +220,7 @@
       "@type": "PropertyValue",
       "name": "e_aian",
       "description": "Adjunct variable - American Indian or Alaska Native, not Hispanic or Latino persons estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052499861"
-      ],
+      "propertyID": "2052499861",
       "qudt:dataType": "int4",
       "unitText": "persons",
       "startDate": "2020-01-01",
@@ -239,9 +230,7 @@
       "@type": "PropertyValue",
       "name": "e_asian",
       "description": "Adjunct variable - Asian, not Hispanic or Latino persons estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052499833"
-      ],
+      "propertyID": "2052499833",
       "qudt:dataType": "int4",
       "unitText": "persons",
       "startDate": "2020-01-01",
@@ -251,9 +240,7 @@
       "@type": "PropertyValue",
       "name": "e_crowd",
       "description": "At household level (occupied housing units), more people than rooms estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052499828"
-      ],
+      "propertyID": "2052499828",
       "qudt:dataType": "int4",
       "unitText": "housing units",
       "startDate": "2020-01-01",
@@ -263,9 +250,7 @@
       "@type": "PropertyValue",
       "name": "e_daypop",
       "description": "Adjunct variable - Estimated daytime population, LandScan 2020",
-      "propertyID": [
-        "2052499427"
-      ],
+      "propertyID": "2052499427",
       "qudt:dataType": "int4",
       "unitText": "persons",
       "startDate": "2020-01-01",
@@ -275,9 +260,7 @@
       "@type": "PropertyValue",
       "name": "e_disabl",
       "description": "Civilian noninstitutionalized population with a disability estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052499669"
-      ],
+      "propertyID": "2052499669",
       "qudt:dataType": "int4",
       "unitText": "persons",
       "startDate": "2020-01-01",
@@ -287,9 +270,7 @@
       "@type": "PropertyValue",
       "name": "e_groupq",
       "description": "Persons in group quarters estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052498109"
-      ],
+      "propertyID": "2052498109",
       "qudt:dataType": "int4",
       "unitText": "persons",
       "startDate": "2020-01-01",
@@ -299,9 +280,7 @@
       "@type": "PropertyValue",
       "name": "e_hburd",
       "description": "Housing cost-burdened occupied housing units with annual income less than 5,000 (30%+ of income spent on housing costs) estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052499085"
-      ],
+      "propertyID": "2052499085",
       "qudt:dataType": "int4",
       "unitText": "housing units",
       "startDate": "2020-01-01",
@@ -311,9 +290,7 @@
       "@type": "PropertyValue",
       "name": "e_hh",
       "description": "Households estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052499093"
-      ],
+      "propertyID": "2052499093",
       "qudt:dataType": "int4",
       "unitText": "households",
       "startDate": "2020-01-01",
@@ -323,9 +300,7 @@
       "@type": "PropertyValue",
       "name": "e_hisp",
       "description": "Adjunct variable - Hispanic or Latino persons estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052499104"
-      ],
+      "propertyID": "2052499104",
       "qudt:dataType": "int4",
       "unitText": "persons",
       "startDate": "2020-01-01",
@@ -335,9 +310,7 @@
       "@type": "PropertyValue",
       "name": "e_hu",
       "description": "Housing units estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052499075"
-      ],
+      "propertyID": "2052499075",
       "qudt:dataType": "int4",
       "unitText": "housing units",
       "startDate": "2020-01-01",
@@ -347,9 +320,7 @@
       "@type": "PropertyValue",
       "name": "e_limeng",
       "description": "Persons (age 5+) who speak English \"less than well\" estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052498117"
-      ],
+      "propertyID": "2052498117",
       "qudt:dataType": "int4",
       "unitText": "persons",
       "startDate": "2020-01-01",
@@ -359,9 +330,7 @@
       "@type": "PropertyValue",
       "name": "e_minrty",
       "description": "Minority (Hispanic or Latino (of any race) -- Black and African American, Not Hispanic or Latino -- American Indian and Alaska Native, Not Hispanic or Latino -- Asian, Not Hispanic or Latino -- Native Hawaiian and Other Pacific Islander, Not Hispanic or Latino -- Two or More Races, Not Hispanic or Latino -- Other Races, Not Hispanic or Latino) estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052498841"
-      ],
+      "propertyID": "2052498841",
       "qudt:dataType": "int4",
       "unitText": "persons",
       "startDate": "2020-01-01",
@@ -371,9 +340,7 @@
       "@type": "PropertyValue",
       "name": "e_mobile",
       "description": "Mobile homes estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052498834"
-      ],
+      "propertyID": "2052498834",
       "qudt:dataType": "int4",
       "unitText": "mobile homes",
       "startDate": "2020-01-01",
@@ -383,9 +350,7 @@
       "@type": "PropertyValue",
       "name": "e_munit",
       "description": "Housing in structures with 10 or more units estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052499082"
-      ],
+      "propertyID": "2052499082",
       "qudt:dataType": "int4",
       "unitText": "structures",
       "startDate": "2020-01-01",
@@ -395,9 +360,7 @@
       "@type": "PropertyValue",
       "name": "e_nhpi",
       "description": "Adjunct variable - Native Hawaiian or Other Pacific Islander, not Hispanic or Latino persons estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052498764"
-      ],
+      "propertyID": "2052498764",
       "qudt:dataType": "int4",
       "unitText": "persons",
       "startDate": "2020-01-01",
@@ -407,9 +370,7 @@
       "@type": "PropertyValue",
       "name": "e_nohsdp",
       "description": "Persons (age 25+) with no high school diploma estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052498119"
-      ],
+      "propertyID": "2052498119",
       "qudt:dataType": "int4",
       "unitText": "persons",
       "startDate": "2020-01-01",
@@ -419,9 +380,7 @@
       "@type": "PropertyValue",
       "name": "e_noint",
       "description": "Adjunct variable - Households without a computer with a broadband Internet subscription estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052499089"
-      ],
+      "propertyID": "2052499089",
       "qudt:dataType": "int4",
       "unitText": "households",
       "startDate": "2020-01-01",
@@ -431,9 +390,7 @@
       "@type": "PropertyValue",
       "name": "e_noveh",
       "description": "Households with no vehicle available estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052499091"
-      ],
+      "propertyID": "2052499091",
       "qudt:dataType": "int4",
       "unitText": "households",
       "startDate": "2020-01-01",
@@ -443,9 +400,7 @@
       "@type": "PropertyValue",
       "name": "e_otherrace",
       "description": "Adjunct variable - Some other race, not Hispanic or Latino persons estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052497741"
-      ],
+      "propertyID": "2052497741",
       "qudt:dataType": "int4",
       "unitText": "persons",
       "startDate": "2020-01-01",
@@ -455,9 +410,7 @@
       "@type": "PropertyValue",
       "name": "e_pov150",
       "description": "Persons below 150% poverty estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052498111"
-      ],
+      "propertyID": "2052498111",
       "qudt:dataType": "int4",
       "unitText": "households",
       "startDate": "2020-01-01",
@@ -467,9 +420,7 @@
       "@type": "PropertyValue",
       "name": "e_sngpnt",
       "description": "Single-parent household with children under 18 estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052497778"
-      ],
+      "propertyID": "2052497778",
       "qudt:dataType": "int4",
       "unitText": "persons",
       "startDate": "2020-01-01",
@@ -479,9 +430,7 @@
       "@type": "PropertyValue",
       "name": "e_totpop",
       "description": "Population estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052498091"
-      ],
+      "propertyID": "2052498091",
       "qudt:dataType": "int4",
       "unitText": "persons",
       "startDate": "2020-01-01",
@@ -491,9 +440,7 @@
       "@type": "PropertyValue",
       "name": "e_twomore",
       "description": "Adjunct variable - Two or more races, not Hispanic or Latino persons estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052497160"
-      ],
+      "propertyID": "2052497160",
       "qudt:dataType": "int4",
       "unitText": "persons",
       "startDate": "2020-01-01",
@@ -503,9 +450,7 @@
       "@type": "PropertyValue",
       "name": "e_unemp",
       "description": "Civilian (age 16+) unemployed estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052499671"
-      ],
+      "propertyID": "2052499671",
       "qudt:dataType": "int4",
       "unitText": "persons",
       "startDate": "2020-01-01",
@@ -515,9 +460,7 @@
       "@type": "PropertyValue",
       "name": "e_uninsur",
       "description": "Uninsured in the total civilian noninstitutionalized population estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052497149"
-      ],
+      "propertyID": "2052497149",
       "qudt:dataType": "int4",
       "unitText": "persons",
       "startDate": "2020-01-01",
@@ -527,9 +470,7 @@
       "@type": "PropertyValue",
       "name": "ep_afam",
       "description": "Adjunct variable - Percentage of Black/African American, not Hispanic or Latino persons estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052498571"
-      ],
+      "propertyID": "2052498571",
       "qudt:dataType": "float8",
       "unitText": "percent",
       "startDate": "2020-01-01",
@@ -539,9 +480,7 @@
       "@type": "PropertyValue",
       "name": "ep_age17",
       "description": "Percentage of persons aged 17 and younger estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052498382"
-      ],
+      "propertyID": "2052498382",
       "qudt:dataType": "float8",
       "unitText": "percent",
       "startDate": "2020-01-01",
@@ -551,9 +490,7 @@
       "@type": "PropertyValue",
       "name": "ep_age65",
       "description": "Percentage of persons aged 65 and older estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052498380"
-      ],
+      "propertyID": "2052498380",
       "qudt:dataType": "float8",
       "unitText": "percent",
       "startDate": "2020-01-01",
@@ -563,9 +500,7 @@
       "@type": "PropertyValue",
       "name": "ep_aian",
       "description": "Adjunct variable - Percentage of American Indian or Alaska Native, not Hispanic or Latino persons estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052498581"
-      ],
+      "propertyID": "2052498581",
       "qudt:dataType": "float8",
       "unitText": "percent",
       "startDate": "2020-01-01",
@@ -575,9 +510,7 @@
       "@type": "PropertyValue",
       "name": "ep_asian",
       "description": "Adjunct variable - Percentage of Asian, not Hispanic or Latino persons estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052498576"
-      ],
+      "propertyID": "2052498576",
       "qudt:dataType": "float8",
       "unitText": "percent",
       "startDate": "2020-01-01",
@@ -587,9 +520,7 @@
       "@type": "PropertyValue",
       "name": "ep_crowd",
       "description": "Percentage of occupied housing units with more people than rooms estimate",
-      "propertyID": [
-        "2052498400"
-      ],
+      "propertyID": "2052498400",
       "qudt:dataType": "float8",
       "unitText": "percent",
       "startDate": "2020-01-01",
@@ -599,9 +530,7 @@
       "@type": "PropertyValue",
       "name": "ep_disabl",
       "description": "Percentage of civilian noninstitutionalized population with a disability estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052498558"
-      ],
+      "propertyID": "2052498558",
       "qudt:dataType": "float8",
       "unitText": "percent",
       "startDate": "2020-01-01",
@@ -611,9 +540,7 @@
       "@type": "PropertyValue",
       "name": "ep_groupq",
       "description": "Percentage of persons in group quarters estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052498376"
-      ],
+      "propertyID": "2052498376",
       "qudt:dataType": "float8",
       "unitText": "percent",
       "startDate": "2020-01-01",
@@ -623,9 +550,7 @@
       "@type": "PropertyValue",
       "name": "ep_hburd",
       "description": "Percentage of housing cost-burdened occupied housing units with annual income less than 5,000 (30%+ of income spent on housing costs) estimate, 2016-2020 ACS estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052498464"
-      ],
+      "propertyID": "2052498464",
       "qudt:dataType": "float8",
       "unitText": "percent",
       "startDate": "2020-01-01",
@@ -635,9 +560,7 @@
       "@type": "PropertyValue",
       "name": "ep_hisp",
       "description": "Adjunct variable - Percentage of Hispanic or Latino persons estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052498520"
-      ],
+      "propertyID": "2052498520",
       "qudt:dataType": "float8",
       "unitText": "percent",
       "startDate": "2020-01-01",
@@ -647,9 +570,7 @@
       "@type": "PropertyValue",
       "name": "ep_limeng",
       "description": "Percentage of persons (age 5+) who speak English \"less than well\" estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052498385"
-      ],
+      "propertyID": "2052498385",
       "qudt:dataType": "float8",
       "unitText": "percent",
       "startDate": "2020-01-01",
@@ -659,9 +580,7 @@
       "@type": "PropertyValue",
       "name": "ep_minrty",
       "description": "Percentage minority (Hispanic or Latino (of any race) -- Black and African American, Not Hispanic or Latino -- American Indian and Alaska Native, Not Hispanic or Latino -- Asian, Not Hispanic or Latino -- Native Hawaiian and Other Pacific Islander, Not Hispanic or Latino -- Two or More Races, Not Hispanic or Latino -- Other Races, Not Hispanic or Latino) estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052498423"
-      ],
+      "propertyID": "2052498423",
       "qudt:dataType": "float8",
       "unitText": "percent",
       "startDate": "2020-01-01",
@@ -671,9 +590,7 @@
       "@type": "PropertyValue",
       "name": "ep_mobile",
       "description": "Percentage of mobile homes estimate",
-      "propertyID": [
-        "2052498422"
-      ],
+      "propertyID": "2052498422",
       "qudt:dataType": "float8",
       "unitText": "percent",
       "startDate": "2020-01-01",
@@ -683,9 +600,7 @@
       "@type": "PropertyValue",
       "name": "ep_munit",
       "description": "Percentage of housing in structures with 10 or more units estimate",
-      "propertyID": [
-        "2052498461"
-      ],
+      "propertyID": "2052498461",
       "qudt:dataType": "float8",
       "unitText": "percent",
       "startDate": "2020-01-01",
@@ -695,9 +610,7 @@
       "@type": "PropertyValue",
       "name": "ep_nhpi",
       "description": "Adjunct variable - Percentage of Native Hawaiian or Other Pacific Islander, not Hispanic or Latino persons estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052498418"
-      ],
+      "propertyID": "2052498418",
       "qudt:dataType": "float8",
       "unitText": "percent",
       "startDate": "2020-01-01",
@@ -707,9 +620,7 @@
       "@type": "PropertyValue",
       "name": "ep_nohsdp",
       "description": "Percentage of persons with no high school diploma (age 25+) estimate",
-      "propertyID": [
-        "2052498369"
-      ],
+      "propertyID": "2052498369",
       "qudt:dataType": "float8",
       "unitText": "percent",
       "startDate": "2020-01-01",
@@ -719,9 +630,7 @@
       "@type": "PropertyValue",
       "name": "ep_noint",
       "description": "Adjunct variable - Percentage of households without a computer with a broadband Internet subscription estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052498468"
-      ],
+      "propertyID": "2052498468",
       "qudt:dataType": "float8",
       "unitText": "percent",
       "startDate": "2020-01-01",
@@ -731,9 +640,7 @@
       "@type": "PropertyValue",
       "name": "ep_noveh",
       "description": "Percentage of households with no vehicle available estimate",
-      "propertyID": [
-        "2052498477"
-      ],
+      "propertyID": "2052498477",
       "qudt:dataType": "float8",
       "unitText": "percent",
       "startDate": "2020-01-01",
@@ -743,9 +650,7 @@
       "@type": "PropertyValue",
       "name": "ep_otherrace",
       "description": "Adjunct variable - Percentage of some other race, not Hispanic or Latino persons estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052498246"
-      ],
+      "propertyID": "2052498246",
       "qudt:dataType": "float8",
       "unitText": "percent",
       "startDate": "2020-01-01",
@@ -755,9 +660,7 @@
       "@type": "PropertyValue",
       "name": "ep_pov150",
       "description": "Percentage of persons below 150% poverty estimate",
-      "propertyID": [
-        "2052498378"
-      ],
+      "propertyID": "2052498378",
       "qudt:dataType": "float8",
       "unitText": "percent",
       "startDate": "2020-01-01",
@@ -767,9 +670,7 @@
       "@type": "PropertyValue",
       "name": "ep_sngpnt",
       "description": "Percentage of single-parent households with children under 18 estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052498249"
-      ],
+      "propertyID": "2052498249",
       "qudt:dataType": "float8",
       "unitText": "percent",
       "startDate": "2020-01-01",
@@ -779,9 +680,7 @@
       "@type": "PropertyValue",
       "name": "ep_twomore",
       "description": "Adjunct variable - Percentage of two or more races, not Hispanic or Latino persons estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052498228"
-      ],
+      "propertyID": "2052498228",
       "qudt:dataType": "float8",
       "unitText": "percent",
       "startDate": "2020-01-01",
@@ -791,9 +690,7 @@
       "@type": "PropertyValue",
       "name": "ep_unemp",
       "description": "Unemployment Rate estimate",
-      "propertyID": [
-        "2052497153"
-      ],
+      "propertyID": "2052497153",
       "qudt:dataType": "float8",
       "unitText": "percent",
       "startDate": "2020-01-01",
@@ -803,9 +700,7 @@
       "@type": "PropertyValue",
       "name": "ep_uninsur",
       "description": "Percentage uninsured in the total civilian noninstitutionalized population estimate, 2016-2020 ACS",
-      "propertyID": [
-        "2052498200"
-      ],
+      "propertyID": "2052498200",
       "qudt:dataType": "float8",
       "unitText": "percent",
       "startDate": "2020-01-01",
@@ -815,9 +710,7 @@
       "@type": "PropertyValue",
       "name": "epl_age17",
       "description": "Percentile percentage of persons aged 17 and younger estimate",
-      "propertyID": [
-        "2052498183"
-      ],
+      "propertyID": "2052498183",
       "qudt:dataType": "float8",
       "unitText": "percentile",
       "startDate": "2020-01-01",
@@ -827,9 +720,7 @@
       "@type": "PropertyValue",
       "name": "epl_age65",
       "description": "Percentile percentage of persons aged 65 and older estimate",
-      "propertyID": [
-        "2052498182"
-      ],
+      "propertyID": "2052498182",
       "qudt:dataType": "float8",
       "unitText": "percentile",
       "startDate": "2020-01-01",
@@ -839,9 +730,7 @@
       "@type": "PropertyValue",
       "name": "epl_crowd",
       "description": "Percentile percentage households with more people than rooms estimate",
-      "propertyID": [
-        "2052498195"
-      ],
+      "propertyID": "2052498195",
       "qudt:dataType": "float8",
       "unitText": "percentile",
       "startDate": "2020-01-01",
@@ -851,9 +740,7 @@
       "@type": "PropertyValue",
       "name": "epl_disabl",
       "description": "Percentile percentage of civilian noninstitutionalized population with a disability estimate",
-      "propertyID": [
-        "2052498186"
-      ],
+      "propertyID": "2052498186",
       "qudt:dataType": "float8",
       "unitText": "percentile",
       "startDate": "2020-01-01",
@@ -863,9 +750,7 @@
       "@type": "PropertyValue",
       "name": "epl_groupq",
       "description": "Percentile percentage of persons in group quarters estimate",
-      "propertyID": [
-        "2052498180"
-      ],
+      "propertyID": "2052498180",
       "qudt:dataType": "float8",
       "unitText": "percentile",
       "startDate": "2020-01-01",
@@ -875,9 +760,7 @@
       "@type": "PropertyValue",
       "name": "epl_hburd",
       "description": "Percentile percentage of housing cost-burdened occupied housing units estimate",
-      "propertyID": [
-        "2052498185"
-      ],
+      "propertyID": "2052498185",
       "qudt:dataType": "float8",
       "unitText": "percentile",
       "startDate": "2020-01-01",
@@ -887,9 +770,7 @@
       "@type": "PropertyValue",
       "name": "epl_limeng",
       "description": "Percentile percentage of persons (age 5+) who speak English \"less than well\" estimate",
-      "propertyID": [
-        "2052498184"
-      ],
+      "propertyID": "2052498184",
       "qudt:dataType": "float8",
       "unitText": "percentile",
       "startDate": "2020-01-01",
@@ -899,9 +780,7 @@
       "@type": "PropertyValue",
       "name": "epl_minrty",
       "description": "Percentile percentage minority (Hispanic or Latino (of any race) -- Black and African American, Not Hispanic or Latino -- American Indian and Alaska Native, Not Hispanic or Latino -- Asian, Not Hispanic or Latino -- Native Hawaiian and Other Pacific Islander, Not Hispanic or Latino -- Two or More Races, Not Hispanic or Latino -- Other Races, Not Hispanic or Latino) estimate",
-      "propertyID": [
-        "2052498189"
-      ],
+      "propertyID": "2052498189",
       "qudt:dataType": "float8",
       "unitText": "percentile",
       "startDate": "2020-01-01",
@@ -911,9 +790,7 @@
       "@type": "PropertyValue",
       "name": "epl_mobile",
       "description": "Percentile percentage mobile homes estimate",
-      "propertyID": [
-        "2052498188"
-      ],
+      "propertyID": "2052498188",
       "qudt:dataType": "float8",
       "unitText": "percentile",
       "startDate": "2020-01-01",
@@ -923,9 +800,7 @@
       "@type": "PropertyValue",
       "name": "epl_munit",
       "description": "Percentile percentage housing in structures with 10 or more units estimate",
-      "propertyID": [
-        "2052498193"
-      ],
+      "propertyID": "2052498193",
       "qudt:dataType": "float8",
       "unitText": "percentile",
       "startDate": "2020-01-01",
@@ -935,9 +810,7 @@
       "@type": "PropertyValue",
       "name": "epl_nohsdp",
       "description": "Percentile percentage of persons with no high school diploma (age 25+) estimate",
-      "propertyID": [
-        "2052498179"
-      ],
+      "propertyID": "2052498179",
       "qudt:dataType": "float8",
       "unitText": "percentile",
       "startDate": "2020-01-01",
@@ -947,9 +820,7 @@
       "@type": "PropertyValue",
       "name": "epl_noveh",
       "description": "Percentile percentage households with no vehicle available estimate",
-      "propertyID": [
-        "2052498194"
-      ],
+      "propertyID": "2052498194",
       "qudt:dataType": "float8",
       "unitText": "percentile",
       "startDate": "2020-01-01",
@@ -959,9 +830,7 @@
       "@type": "PropertyValue",
       "name": "epl_pov150",
       "description": "Percentile percentage of persons below 150% poverty estimate",
-      "propertyID": [
-        "2052498181"
-      ],
+      "propertyID": "2052498181",
       "qudt:dataType": "float8",
       "unitText": "percentile",
       "startDate": "2020-01-01",
@@ -971,9 +840,7 @@
       "@type": "PropertyValue",
       "name": "epl_sngpnt",
       "description": "Percentile percentage of single-parent households with children under 18 estimate",
-      "propertyID": [
-        "2052498178"
-      ],
+      "propertyID": "2052498178",
       "qudt:dataType": "float8",
       "unitText": "percentile",
       "startDate": "2020-01-01",
@@ -983,9 +850,7 @@
       "@type": "PropertyValue",
       "name": "epl_unemp",
       "description": "Percentile percentage of civilian (age 16+) unemployed estimate",
-      "propertyID": [
-        "2052498187"
-      ],
+      "propertyID": "2052498187",
       "qudt:dataType": "float8",
       "unitText": "percentile",
       "startDate": "2020-01-01",
@@ -995,9 +860,7 @@
       "@type": "PropertyValue",
       "name": "epl_uninsur",
       "description": "Percentile percentage of uninsured estimate",
-      "propertyID": [
-        "2052498150"
-      ],
+      "propertyID": "2052498150",
       "qudt:dataType": "float8",
       "unitText": "percentile",
       "startDate": "2020-01-01",
@@ -1007,9 +870,7 @@
       "@type": "PropertyValue",
       "name": "f_age17",
       "description": "Flag - the percentage of persons aged 17 and younger is in the 90th percentile (1 = yes, 0 = no) ",
-      "propertyID": [
-        "2052499366"
-      ],
+      "propertyID": "2052499366",
       "qudt:dataType": "boolean",
       "startDate": "2020-01-01",
       "endDate": "2020-12-31"
@@ -1018,9 +879,7 @@
       "@type": "PropertyValue",
       "name": "f_age65",
       "description": "Flag - the percentage of persons aged 65 and older is in the 90th percentile (1 = yes, 0 = no) ",
-      "propertyID": [
-        "2052499365"
-      ],
+      "propertyID": "2052499365",
       "qudt:dataType": "boolean",
       "startDate": "2020-01-01",
       "endDate": "2020-12-31"
@@ -1029,9 +888,7 @@
       "@type": "PropertyValue",
       "name": "f_crowd",
       "description": "Flag - the percentage of crowded households is in the 90th percentile (1 = yes, 0 = no)",
-      "propertyID": [
-        "2052499372"
-      ],
+      "propertyID": "2052499372",
       "qudt:dataType": "boolean",
       "startDate": "2020-01-01",
       "endDate": "2020-12-31"
@@ -1040,9 +897,7 @@
       "@type": "PropertyValue",
       "name": "f_disabl",
       "description": "Flag - the percentage of persons with a disability is in the 90th percentile (1 = yes, 0 = no) ",
-      "propertyID": [
-        "2052499362"
-      ],
+      "propertyID": "2052499362",
       "qudt:dataType": "boolean",
       "startDate": "2020-01-01",
       "endDate": "2020-12-31"
@@ -1051,9 +906,7 @@
       "@type": "PropertyValue",
       "name": "f_groupq",
       "description": "Flag - the percentage of persons in group quarters is in the 90th percentile (1 = yes, 0 = no) ",
-      "propertyID": [
-        "2052499363"
-      ],
+      "propertyID": "2052499363",
       "qudt:dataType": "boolean",
       "startDate": "2020-01-01",
       "endDate": "2020-12-31"
@@ -1062,9 +915,7 @@
       "@type": "PropertyValue",
       "name": "f_hburd",
       "description": "Flag - the percentage of housing cost-burdened occupied housing units is in the 90th percentile (1 = yes, 0 = no)",
-      "propertyID": [
-        "2052499369"
-      ],
+      "propertyID": "2052499369",
       "qudt:dataType": "boolean",
       "startDate": "2020-01-01",
       "endDate": "2020-12-31"
@@ -1073,9 +924,7 @@
       "@type": "PropertyValue",
       "name": "f_limeng",
       "description": "Flag - the percentage those with limited English is in the 90th percentile (1 = yes, 0 = no) ",
-      "propertyID": [
-        "2052499358"
-      ],
+      "propertyID": "2052499358",
       "qudt:dataType": "boolean",
       "startDate": "2020-01-01",
       "endDate": "2020-12-31"
@@ -1084,9 +933,7 @@
       "@type": "PropertyValue",
       "name": "f_minrty",
       "description": "Flag - the percentage of minority is in the 90th percentile (1 = yes, 0 = no)",
-      "propertyID": [
-        "2052499368"
-      ],
+      "propertyID": "2052499368",
       "qudt:dataType": "boolean",
       "startDate": "2020-01-01",
       "endDate": "2020-12-31"
@@ -1095,9 +942,7 @@
       "@type": "PropertyValue",
       "name": "f_mobile",
       "description": "Flag - the percentage of mobile homes is in the 90th percentile (1 = yes, 0 = no)",
-      "propertyID": [
-        "2052499367"
-      ],
+      "propertyID": "2052499367",
       "qudt:dataType": "boolean",
       "startDate": "2020-01-01",
       "endDate": "2020-12-31"
@@ -1106,9 +951,7 @@
       "@type": "PropertyValue",
       "name": "f_munit",
       "description": "Flag - the percentage of households in multi-unit housing is in the 90th percentile (1 = yes, 0 = no)",
-      "propertyID": [
-        "2052499371"
-      ],
+      "propertyID": "2052499371",
       "qudt:dataType": "boolean",
       "startDate": "2020-01-01",
       "endDate": "2020-12-31"
@@ -1117,9 +960,7 @@
       "@type": "PropertyValue",
       "name": "f_nohsdp",
       "description": "Flag - the percentage of persons with no high school diploma is in the 90th percentile (1 = yes, 0 = no) ",
-      "propertyID": [
-        "2052499361"
-      ],
+      "propertyID": "2052499361",
       "qudt:dataType": "boolean",
       "startDate": "2020-01-01",
       "endDate": "2020-12-31"
@@ -1128,9 +969,7 @@
       "@type": "PropertyValue",
       "name": "f_noveh",
       "description": "Flag - the percentage of households with no vehicles is in the 90th percentile (1 = yes, 0 = no) ",
-      "propertyID": [
-        "2052499370"
-      ],
+      "propertyID": "2052499370",
       "qudt:dataType": "boolean",
       "startDate": "2020-01-01",
       "endDate": "2020-12-31"
@@ -1139,9 +978,7 @@
       "@type": "PropertyValue",
       "name": "f_pov150",
       "description": "Flag - the percentage of persons below 150% poverty is in the 90th percentile (1 = yes, 0 = no)",
-      "propertyID": [
-        "2052499364"
-      ],
+      "propertyID": "2052499364",
       "qudt:dataType": "boolean",
       "startDate": "2020-01-01",
       "endDate": "2020-12-31"
@@ -1150,9 +987,7 @@
       "@type": "PropertyValue",
       "name": "f_sngpnt",
       "description": "Flag - the percentage of single-parent households is in the 90th percentile (1 = yes, 0 = no)",
-      "propertyID": [
-        "2052499360"
-      ],
+      "propertyID": "2052499360",
       "qudt:dataType": "boolean",
       "startDate": "2020-01-01",
       "endDate": "2020-12-31"
@@ -1161,9 +996,7 @@
       "@type": "PropertyValue",
       "name": "f_theme1",
       "description": "Sum of flags for Socioeconomic Status theme",
-      "propertyID": [
-        "2052497702"
-      ],
+      "propertyID": "2052497702",
       "qudt:dataType": "int4",
       "startDate": "2020-01-01",
       "endDate": "2020-12-31"
@@ -1172,9 +1005,7 @@
       "@type": "PropertyValue",
       "name": "f_theme2",
       "description": "Sum of flags for Household Characteristics theme",
-      "propertyID": [
-        "2052497705"
-      ],
+      "propertyID": "2052497705",
       "qudt:dataType": "int4",
       "startDate": "2020-01-01",
       "endDate": "2020-12-31"
@@ -1183,9 +1014,7 @@
       "@type": "PropertyValue",
       "name": "f_theme3",
       "description": "Sum of flags for Racial and Ethnic Minority Status theme",
-      "propertyID": [
-        "2052497703"
-      ],
+      "propertyID": "2052497703",
       "qudt:dataType": "int4",
       "startDate": "2020-01-01",
       "endDate": "2020-12-31"
@@ -1194,9 +1023,7 @@
       "@type": "PropertyValue",
       "name": "f_theme4",
       "description": "Sum of flags for Housing Type/ Transportation theme",
-      "propertyID": [
-        "2052497704"
-      ],
+      "propertyID": "2052497704",
       "qudt:dataType": "int4",
       "startDate": "2020-01-01",
       "endDate": "2020-12-31"
@@ -1205,9 +1032,7 @@
       "@type": "PropertyValue",
       "name": "f_total",
       "description": "Sum of flags for the four themes",
-      "propertyID": [
-        "2052497701"
-      ],
+      "propertyID": "2052497701",
       "qudt:dataType": "int4",
       "startDate": "2020-01-01",
       "endDate": "2020-12-31"
@@ -1216,9 +1041,7 @@
       "@type": "PropertyValue",
       "name": "f_unemp",
       "description": "Flag - the percentage of civilian unemployed is in the 90th percentile (1 = yes, 0 = no) ",
-      "propertyID": [
-        "2052499373"
-      ],
+      "propertyID": "2052499373",
       "qudt:dataType": "boolean",
       "startDate": "2020-01-01",
       "endDate": "2020-12-31"
@@ -1227,9 +1050,7 @@
       "@type": "PropertyValue",
       "name": "f_uninsur",
       "description": "Flag - the percentage of uninsured is in the 90th percentile (1 = yes, 0 = no) ",
-      "propertyID": [
-        "2052499359"
-      ],
+      "propertyID": "2052499359",
       "qudt:dataType": "boolean",
       "startDate": "2020-01-01",
       "endDate": "2020-12-31"
@@ -1238,9 +1059,7 @@
       "@type": "PropertyValue",
       "name": "fips",
       "description": "Tract-level FIPS code",
-      "propertyID": [
-        "2052497174"
-      ],
+      "propertyID": "2052497174",
       "qudt:dataType": "varchar",
       "startDate": "2020-01-01",
       "endDate": "2020-12-31"
@@ -1249,9 +1068,6 @@
       "@type": "PropertyValue",
       "name": "location",
       "description": "Text description of tract, county, state",
-      "propertyID": [
-        ""
-      ],
       "qudt:dataType": "varchar",
       "startDate": "2020-01-01",
       "endDate": "2020-12-31"
@@ -1260,9 +1076,7 @@
       "@type": "PropertyValue",
       "name": "m_afam",
       "description": "Adjunct variable - Black/African American, not Hispanic or Latino persons estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052499782"
-      ],
+      "propertyID": "2052499782",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1272,9 +1086,7 @@
       "@type": "PropertyValue",
       "name": "m_age17",
       "description": "Persons aged 17 and younger estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052498114"
-      ],
+      "propertyID": "2052498114",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1284,9 +1096,7 @@
       "@type": "PropertyValue",
       "name": "m_age65",
       "description": "Persons aged 65 and older estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052498112"
-      ],
+      "propertyID": "2052498112",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1296,9 +1106,7 @@
       "@type": "PropertyValue",
       "name": "m_aian",
       "description": "Adjunct variable - American Indian or Alaska Native, not Hispanic or Latino persons estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052499860"
-      ],
+      "propertyID": "2052499860",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1308,9 +1116,7 @@
       "@type": "PropertyValue",
       "name": "m_asian",
       "description": "Adjunct variable - Asian, not Hispanic or Latino persons estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052499832"
-      ],
+      "propertyID": "2052499832",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1320,9 +1126,7 @@
       "@type": "PropertyValue",
       "name": "m_crowd",
       "description": "At household level (occupied housing units), more people than rooms estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052499827"
-      ],
+      "propertyID": "2052499827",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1332,9 +1136,7 @@
       "@type": "PropertyValue",
       "name": "m_disabl",
       "description": "Civilian noninstitutionalized population with a disability estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052499668"
-      ],
+      "propertyID": "2052499668",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1344,9 +1146,7 @@
       "@type": "PropertyValue",
       "name": "m_groupq",
       "description": "Persons in group quarters estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052498108"
-      ],
+      "propertyID": "2052498108",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1356,9 +1156,7 @@
       "@type": "PropertyValue",
       "name": "m_hburd",
       "description": "Housing cost-burdened occupied housing units with annual income less than 5,000 (30%+ of income spent on housing costs) estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052499084"
-      ],
+      "propertyID": "2052499084",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1368,9 +1166,7 @@
       "@type": "PropertyValue",
       "name": "m_hh",
       "description": "Households estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052499092"
-      ],
+      "propertyID": "2052499092",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1380,9 +1176,7 @@
       "@type": "PropertyValue",
       "name": "m_hisp",
       "description": "Adjunct variable - Hispanic or Latino persons estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052499103"
-      ],
+      "propertyID": "2052499103",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1392,9 +1186,7 @@
       "@type": "PropertyValue",
       "name": "m_hu",
       "description": "Housing units estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052499074"
-      ],
+      "propertyID": "2052499074",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1404,9 +1196,7 @@
       "@type": "PropertyValue",
       "name": "m_limeng",
       "description": "Persons (age 5+) who speak English \"less than well\" estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052498116"
-      ],
+      "propertyID": "2052498116",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1416,9 +1206,7 @@
       "@type": "PropertyValue",
       "name": "m_minrty",
       "description": "Minority (Hispanic or Latino (of any race) -- Black and African American, Not Hispanic or Latino -- American Indian and Alaska Native, Not Hispanic or Latino -- Asian, Not Hispanic or Latino -- Native Hawaiian and Other Pacific Islander, Not Hispanic or Latino -- Two or More Races, Not Hispanic or Latino -- Other Races, Not Hispanic or Latino) estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052490073"
-      ],
+      "propertyID": "2052490073",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1428,9 +1216,7 @@
       "@type": "PropertyValue",
       "name": "m_mobile",
       "description": "Mobile homes estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052498833"
-      ],
+      "propertyID": "2052498833",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1440,9 +1226,7 @@
       "@type": "PropertyValue",
       "name": "m_munit",
       "description": "Housing in structures with 10 or more units estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052499081"
-      ],
+      "propertyID": "2052499081",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1452,9 +1236,7 @@
       "@type": "PropertyValue",
       "name": "m_nhpi",
       "description": "Adjunct variable - Native Hawaiian or Other Pacific Islander, not Hispanic or Latino persons estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052498763"
-      ],
+      "propertyID": "2052498763",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1464,9 +1246,7 @@
       "@type": "PropertyValue",
       "name": "m_nohsdp",
       "description": "Persons (age 25+) with no high school diploma estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052498118"
-      ],
+      "propertyID": "2052498118",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1476,9 +1256,7 @@
       "@type": "PropertyValue",
       "name": "m_noint",
       "description": "Adjunct variable - Households without a computer with a broadband Internet subscription estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052499088"
-      ],
+      "propertyID": "2052499088",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1488,9 +1266,7 @@
       "@type": "PropertyValue",
       "name": "m_noveh",
       "description": "Households with no vehicle available estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052499090"
-      ],
+      "propertyID": "2052499090",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1500,9 +1276,7 @@
       "@type": "PropertyValue",
       "name": "m_otherrace",
       "description": "Adjunct variable - Some other race, not Hispanic or Latino persons estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052497740"
-      ],
+      "propertyID": "2052497740",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1512,9 +1286,7 @@
       "@type": "PropertyValue",
       "name": "m_pov150",
       "description": "Persons below 150% poverty estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052498110"
-      ],
+      "propertyID": "2052498110",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1524,9 +1296,7 @@
       "@type": "PropertyValue",
       "name": "m_sngpnt",
       "description": "Single-parent household with children under 18 estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052497777"
-      ],
+      "propertyID": "2052497777",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1536,9 +1306,7 @@
       "@type": "PropertyValue",
       "name": "m_totpop",
       "description": "Population estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052498090"
-      ],
+      "propertyID": "2052498090",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1548,9 +1316,7 @@
       "@type": "PropertyValue",
       "name": "m_twomore",
       "description": "Adjunct variable - Two or more races, not Hispanic or Latino persons estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052497159"
-      ],
+      "propertyID": "2052497159",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1560,9 +1326,7 @@
       "@type": "PropertyValue",
       "name": "m_unemp",
       "description": "Civilian (age 16+) unemployed estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052499670"
-      ],
+      "propertyID": "2052499670",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1572,9 +1336,7 @@
       "@type": "PropertyValue",
       "name": "m_uninsur",
       "description": "Uninsured in the total civilian noninstitutionalized population estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052497148"
-      ],
+      "propertyID": "2052497148",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1584,9 +1346,7 @@
       "@type": "PropertyValue",
       "name": "mp_afam",
       "description": "Adjunct variable - Percentage of Black/African American, not Hispanic or Latino persons estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052498570"
-      ],
+      "propertyID": "2052498570",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1596,9 +1356,7 @@
       "@type": "PropertyValue",
       "name": "mp_age17",
       "description": "Percentage of persons aged 17 and younger estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052498381"
-      ],
+      "propertyID": "2052498381",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1608,9 +1366,7 @@
       "@type": "PropertyValue",
       "name": "mp_age65",
       "description": "Percentage of persons aged 65 and older estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052498379"
-      ],
+      "propertyID": "2052498379",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1620,9 +1376,7 @@
       "@type": "PropertyValue",
       "name": "mp_aian",
       "description": "Adjunct variable - Percentage of American Indian or Alaska Native, not Hispanic or Latino persons estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052498580"
-      ],
+      "propertyID": "2052498580",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1632,9 +1386,7 @@
       "@type": "PropertyValue",
       "name": "mp_asian",
       "description": "Adjunct variable - Percentage of Asian, not Hispanic or Latino persons estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052498575"
-      ],
+      "propertyID": "2052498575",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1644,9 +1396,7 @@
       "@type": "PropertyValue",
       "name": "mp_crowd",
       "description": "Percentage of occupied housing units with more people than rooms estimate MOE",
-      "propertyID": [
-        "2052498399"
-      ],
+      "propertyID": "2052498399",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1656,9 +1406,7 @@
       "@type": "PropertyValue",
       "name": "mp_disabl",
       "description": "Percentage of civilian noninstitutionalized population with a disability estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052498557"
-      ],
+      "propertyID": "2052498557",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1668,9 +1416,7 @@
       "@type": "PropertyValue",
       "name": "mp_groupq",
       "description": "Percentage of persons in group quarters estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052498375"
-      ],
+      "propertyID": "2052498375",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1680,9 +1426,7 @@
       "@type": "PropertyValue",
       "name": "mp_hburd",
       "description": "Percentage of housing cost-burdened occupied housing units with annual income less than 5,000 (30%+ of income spent on housing costs) estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052498463"
-      ],
+      "propertyID": "2052498463",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1692,9 +1436,7 @@
       "@type": "PropertyValue",
       "name": "mp_hisp",
       "description": "Adjunct variable - Percentage of Hispanic or Latino persons estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052498519"
-      ],
+      "propertyID": "2052498519",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1704,9 +1446,7 @@
       "@type": "PropertyValue",
       "name": "mp_limeng",
       "description": "Percentage of persons (age 5+) who speak English \"less than well\" estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052498383"
-      ],
+      "propertyID": "2052498383",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1716,9 +1456,7 @@
       "@type": "PropertyValue",
       "name": "mp_minrty",
       "description": "Percentage minority (Hispanic or Latino (of any race) -- Black and African American, Not Hispanic or Latino -- American Indian and Alaska Native, Not Hispanic or Latino -- Asian, Not Hispanic or Latino -- Native Hawaiian and Other Pacific Islander, Not Hispanic or Latino -- Two or More Races, Not Hispanic or Latino -- Other Races, Not Hispanic or Latino) estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052498609"
-      ],
+      "propertyID": "2052498609",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1728,9 +1466,7 @@
       "@type": "PropertyValue",
       "name": "mp_mobile",
       "description": "Percentage of mobile homes estimate MOE",
-      "propertyID": [
-        "2052498421"
-      ],
+      "propertyID": "2052498421",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1740,9 +1476,7 @@
       "@type": "PropertyValue",
       "name": "mp_munit",
       "description": "Percentage of housing in structures with 10 or more units estimate MOE",
-      "propertyID": [
-        "2052498460"
-      ],
+      "propertyID": "2052498460",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1752,9 +1486,7 @@
       "@type": "PropertyValue",
       "name": "mp_nhpi",
       "description": "Adjunct variable - Percentage of Native Hawaiian or Other Pacific Islander, not Hispanic or Latino persons estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052498417"
-      ],
+      "propertyID": "2052498417",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1764,9 +1496,7 @@
       "@type": "PropertyValue",
       "name": "mp_nohsdp",
       "description": "Percentage of persons with no high school diploma (25+) estimate MOE",
-      "propertyID": [
-        "2052498370"
-      ],
+      "propertyID": "2052498370",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1776,9 +1506,7 @@
       "@type": "PropertyValue",
       "name": "mp_noint",
       "description": "Adjunct variable - Percentage of households without a computer with a broadband Internet subscription estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052498467"
-      ],
+      "propertyID": "2052498467",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1788,9 +1516,7 @@
       "@type": "PropertyValue",
       "name": "mp_noveh",
       "description": "Percentage of households with no vehicle available estimate MOE",
-      "propertyID": [
-        "2052498476"
-      ],
+      "propertyID": "2052498476",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1800,9 +1526,7 @@
       "@type": "PropertyValue",
       "name": "mp_otherrace",
       "description": "Adjunct variable - Percentage of some other race, not Hispanic or Latino persons estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052498245"
-      ],
+      "propertyID": "2052498245",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1812,9 +1536,7 @@
       "@type": "PropertyValue",
       "name": "mp_pov150",
       "description": "Percentage of persons below 150% poverty estimate MOE",
-      "propertyID": [
-        "2052498377"
-      ],
+      "propertyID": "2052498377",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1824,9 +1546,7 @@
       "@type": "PropertyValue",
       "name": "mp_sngpnt",
       "description": "Percentage of single-parent households with children under 18 estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052498248"
-      ],
+      "propertyID": "2052498248",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1836,9 +1556,7 @@
       "@type": "PropertyValue",
       "name": "mp_twomore",
       "description": "Adjunct variable - Percentage of two or more races, not Hispanic or Latino persons estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052498227"
-      ],
+      "propertyID": "2052498227",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1848,9 +1566,7 @@
       "@type": "PropertyValue",
       "name": "mp_unemp",
       "description": "Unemployment Rate estimate MOE",
-      "propertyID": [
-        "2052497152"
-      ],
+      "propertyID": "2052497152",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1860,9 +1576,7 @@
       "@type": "PropertyValue",
       "name": "mp_uninsur",
       "description": "Percentage uninsured in the total civilian noninstitutionalized population estimate MOE, 2016-2020 ACS",
-      "propertyID": [
-        "2052498199"
-      ],
+      "propertyID": "2052498199",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1872,9 +1586,7 @@
       "@type": "PropertyValue",
       "name": "rpl_theme1",
       "description": "Percentile ranking for Socioeconomic Status theme summary",
-      "propertyID": [
-        "2052498129"
-      ],
+      "propertyID": "2052498129",
       "qudt:dataType": "float8",
       "unitText": "moe",
       "startDate": "2020-01-01",
@@ -1884,9 +1596,7 @@
       "@type": "PropertyValue",
       "name": "rpl_theme2",
       "description": "Percentile ranking for Household Characteristics theme summary",
-      "propertyID": [
-        "2052498134"
-      ],
+      "propertyID": "2052498134",
       "qudt:dataType": "float8",
       "unitText": "percentile",
       "startDate": "2020-01-01",
@@ -1896,9 +1606,7 @@
       "@type": "PropertyValue",
       "name": "rpl_theme3",
       "description": "Percentile ranking for Racial and Ethnic Minority Status theme",
-      "propertyID": [
-        "2052498130"
-      ],
+      "propertyID": "2052498130",
       "qudt:dataType": "float8",
       "unitText": "percentile",
       "startDate": "2020-01-01",
@@ -1908,9 +1616,7 @@
       "@type": "PropertyValue",
       "name": "rpl_theme4",
       "description": "Percentile ranking for Housing Type/ Transportation theme",
-      "propertyID": [
-        "2052498133"
-      ],
+      "propertyID": "2052498133",
       "qudt:dataType": "float8",
       "unitText": "percentile",
       "startDate": "2020-01-01",
@@ -1920,9 +1626,7 @@
       "@type": "PropertyValue",
       "name": "rpl_themes",
       "description": "Overall percentile ranking",
-      "propertyID": [
-        "2052498131"
-      ],
+      "propertyID": "2052498131",
       "qudt:dataType": "float8",
       "unitText": "percentile",
       "startDate": "2020-01-01",
@@ -1932,9 +1636,7 @@
       "@type": "PropertyValue",
       "name": "spl_theme1",
       "description": "Sum of series for Socioeconomic Status theme",
-      "propertyID": [
-        "2052497697"
-      ],
+      "propertyID": "2052497697",
       "qudt:dataType": "float8",
       "unitText": "svi index",
       "startDate": "2020-01-01",
@@ -1944,9 +1646,7 @@
       "@type": "PropertyValue",
       "name": "spl_theme2",
       "description": "Sum of series for Household Characteristics theme",
-      "propertyID": [
-        "2052497700"
-      ],
+      "propertyID": "2052497700",
       "qudt:dataType": "float8",
       "unitText": "svi index",
       "startDate": "2020-01-01",
@@ -1956,9 +1656,7 @@
       "@type": "PropertyValue",
       "name": "spl_theme3",
       "description": "Sum of series for Racial and Ethnic Minority Status theme",
-      "propertyID": [
-        "2052497698"
-      ],
+      "propertyID": "2052497698",
       "qudt:dataType": "float8",
       "unitText": "svi index",
       "startDate": "2020-01-01",
@@ -1968,9 +1666,7 @@
       "@type": "PropertyValue",
       "name": "spl_theme4",
       "description": "Sum of series for Housing Type/ Transportation theme",
-      "propertyID": [
-        "2052497699"
-      ],
+      "propertyID": "2052497699",
       "qudt:dataType": "float8",
       "unitText": "svi index",
       "startDate": "2020-01-01",
@@ -1980,9 +1676,6 @@
       "@type": "PropertyValue",
       "name": "spl_themes",
       "description": "Sum of series themes",
-      "propertyID": [
-        ""
-      ],
       "qudt:dataType": "float8",
       "unitText": "svi index",
       "startDate": "2020-01-01",
@@ -1992,36 +1685,28 @@
       "@type": "PropertyValue",
       "name": "st",
       "description": "State-level FIPS code",
-      "propertyID": [
-        "2052497725"
-      ],
+      "propertyID": "2052497725",
       "qudt:dataType": "varchar"
     },
     {
       "@type": "PropertyValue",
       "name": "st_abbr",
       "description": "State abbreviation",
-      "propertyID": [
-        "2052497733"
-      ],
+      "propertyID": "2052497733",
       "qudt:dataType": "varchar"
     },
     {
       "@type": "PropertyValue",
       "name": "state",
       "description": "State name",
-      "propertyID": [
-        "2052497730"
-      ],
+      "propertyID": "2052497730",
       "qudt:dataType": "varchar"
     },
     {
       "@type": "PropertyValue",
       "name": "stcnty",
       "description": "County-level FIPS code",
-      "propertyID": [
-        "2052499638"
-      ],
+      "propertyID": "2052499638",
       "qudt:dataType": "varchar"
     }
   ],
@@ -2029,5 +1714,5 @@
     "https://gdsc.idsc.miami.edu/download/data/ma_2022_svi_tract/?file=ma_2022_svi_tract&format=sql"
   ],
   "dateModified": "2022-02-08",
-  "version": "2026-02-12"
+  "version": "2026-05-23"
 }

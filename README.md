@@ -41,13 +41,14 @@ docker build -t gaia-db .
 
 docker run -d \
   -e POSTGRES_PASSWORD=secret \
+  -e DB_AUTHENTICATOR_PASSWORD=secret \
   -e POSTGRES_USER=postgres \
   -e POSTGRES_DB=gaiacore \
   -e POSTGRES_PORT=5432 \
   -e POSTGRES_HOST=gaia-db \
-  -e PG_PASSWORD_FILE=/run/secrets/pg_password \
   -p 5432:5432 \
   --name gaia-db \
+  --hostname gaia-db 
   gaia-db
 ```
 
@@ -63,9 +64,9 @@ Three mutually exclusive modes are controlled by environment variables. `INIT_WI
 
 | Variable | Default | Behaviour |
 |----------|---------|-----------|
-| `INIT_WITH_DATASOURCE_MOUNT` | `FALSE` | When `TRUE`, skip all population — `/data` must be a bind-mount containing datasets in the standard structure |
-| `INIT_WITH_CATALOG` | `TRUE` | When `TRUE`, shallow-clone [OHDSI/gaiaCatalog](https://github.com/OHDSI/gaiaCatalog) and copy `datastore/data/*` into `/data/` |
-| `INIT_WITH_CATALOG` | `FALSE` | Copy the bundled example dataset from `/extras/` into `/data/` |
+| `INIT_WITH_DATASOURCE_MOUNT` | `FALSE` | When `TRUE`, skip all population — `/data` must be a bind-mount containing datasets in the standard structure as -v /absolute/path/to/data:/data |
+| `INIT_WITH_CATALOG` | `TRUE` | When `TRUE`, shallow-clone [OHDSI/gaiaCatalog](https://github.com/OHDSI/gaiaCatalog) and copy `./datastore/data/*` into `/data/` |
+| `INIT_WITH_CATALOG` | `TRUE` | When `FALSE`, copy the bundled example dataset from `/extras/` into `/data/` |
 
 ### Using a local data directory (bind-mount)
 

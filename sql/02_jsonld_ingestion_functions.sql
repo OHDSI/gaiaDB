@@ -304,7 +304,7 @@ BEGIN
         'CREATE TABLE IF NOT EXISTS %I.%I (
             gid SERIAL PRIMARY KEY,
             %s
-            wgs_geom   GEOMETRY(GEOMETRY, 4326),
+            geom GEOMETRY(GEOMETRY, 4326),
             geom_local GEOMETRY
         )',
         p_schema_name,
@@ -315,7 +315,7 @@ BEGIN
     EXECUTE v_create_sql;
 
     EXECUTE format(
-        'CREATE INDEX IF NOT EXISTS idx_%I_wgs_geom ON %I.%I USING GIST(wgs_geom)',
+        'CREATE INDEX IF NOT EXISTS idx_%I_geom ON %I.%I USING GIST(geom)',
         v_table_name, p_schema_name, v_table_name
     );
 

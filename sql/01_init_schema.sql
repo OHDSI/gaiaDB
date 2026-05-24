@@ -21,6 +21,32 @@ GRANT USAGE ON SCHEMA backbone TO PUBLIC;
 GRANT USAGE ON SCHEMA working TO PUBLIC;
 
 -- * - * - * - * - * - * - * - * - * -
+-- USERS AND ROLES - postgrest
+-- * - * - * - * - * - * - * - * - * -
+
+-- Anonymous (grant select) and token based (grant all) roles
+-- see: https://postgrest.org/en/stable/tutorials/tut1.html
+-- non-authenticated read role
+-- TODO: make limited priviledges and use authenicated role (below)
+CREATE ROLE web_anon NOLOGIN;
+GRANT CREATE ON SCHEMA public, working TO web_anon;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA backbone, public, working, vocabulary TO web_anon;
+ALTER DEFAULT PRIVILEGES IN SCHEMA backbone, public, working, vocabulary GRANT ALL ON TABLES TO web_anon;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA backbone, public, working, vocabulary TO web_anon;
+ALTER DEFAULT PRIVILEGES IN SCHEMA backbone, public, working, vocabulary GRANT ALL ON SEQUENCES TO web_anon;
+GRANT web_anon TO authenticator;
+
+-- authenticated crud role
+-- TODO: fine tune priviledges
+CREATE ROLE crud_user NOLOGIN;
+GRANT CREATE ON SCHEMA public, working TO crud_user;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA backbone, public, working, vocabulary TO crud_user;
+ALTER DEFAULT PRIVILEGES IN SCHEMA backbone, public, working, vocabulary GRANT ALL ON TABLES TO crud_user;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA backbone, public, working, vocabulary TO crud_user;
+ALTER DEFAULT PRIVILEGES IN SCHEMA backbone, public, working, vocabulary GRANT ALL ON SEQUENCES TO crud_user;
+GRANT crud_user TO authenticator;
+
+-- * - * - * - * - * - * - * - * - * -
 -- BACKBONE SCHEMA
 -- * - * - * - * - * - * - * - * - * -
 
@@ -93,9 +119,24 @@ CREATE TABLE IF NOT EXISTS backbone.variable_source (
     UNIQUE(data_source_uuid, variable_name)
 );
 
+-- geom index table
+CREATE TABLE backbone.geom_index (
+    geom_index_id SERIAL4 PRIMARY KEY,
+    data_type_id numeric NULL,
+    data_type_name varchar(255) NULL,
+    geom_type_concept_id numeric NULL,
+    geom_type_source_value varchar(255) NOT NULL,
+    table_name varchar(255) NOT NULL,
+    table_desc text NOT NULL,
+    database_schema varchar(255) NOT NULL );
+
 CREATE TABLE IF NOT EXISTS backbone.geom_template (
     geom_record_id SERIAL PRIMARY KEY,
     data_source_uuid UUID REFERENCES backbone.data_source(data_source_uuid),
+    geom_index_id int4 NOT NULL,
+    CONSTRAINT fk_geom_template_geom_index
+      FOREIGN KEY (geom_index_id) 
+      REFERENCES backbone.geom_index (geom_index_id),
     geom_name TEXT,
     geom_source_coding TEXT,
     geom_source_value TEXT,
@@ -109,10 +150,37 @@ CREATE TABLE IF NOT EXISTS backbone.geom_template (
 CREATE INDEX IF NOT EXISTS idx_geom_template_wgs84
     ON backbone.geom_template USING GIST(geom_wgs84);
 
+-- attr index table
+CREATE TABLE backbone.attr_index (
+    attr_index_id SERIAL4 PRIMARY KEY,
+    geom_index_id int4 NOT NULL,
+    CONSTRAINT fk_attr_index_geom_index
+      FOREIGN KEY (geom_index_id) 
+      REFERENCES backbone.geom_index (geom_index_id),
+    table_name varchar(255) NOT NULL,
+    variable_name varchar NOT NULL,
+    variable_desc text NOT NULL,
+    attr_concept_id int4 NULL,
+    unit_concept_id int4 NULL,
+    unit_source_value varchar NULL,
+    attr_start_date date NOT NULL,
+    attr_end_date date NOT NULL,
+    attr_no_value_as_number numeric NULL,
+    attr_no_value_as_string varchar NULL,
+    qualifier_concept_id int4 NULL,
+    qualifier_source_value varchar NULL,
+    attr_source_concept_id int4 NULL,
+    attr_source_value varchar NOT NULL,
+    database_schema varchar(255) NOT NULL );
+
 CREATE TABLE IF NOT EXISTS backbone.attr_template (
     attr_record_id SERIAL PRIMARY KEY,
     geom_record_id INTEGER REFERENCES backbone.geom_template(geom_record_id),
     variable_source_id INTEGER REFERENCES backbone.variable_source(variable_source_id),
+    attr_index_id int4 NOT NULL,
+    CONSTRAINT fk_attr_template_attr_index
+      FOREIGN KEY (attr_index_id) 
+      REFERENCES backbone.attr_index (attr_index_id),
     attr_concept_id INTEGER,
     attr_start_date DATE NOT NULL,
     attr_end_date DATE NOT NULL,
@@ -230,7 +298,9 @@ COMMENT ON SCHEMA backbone IS 'Core metadata and template tables for GAIA data m
 COMMENT ON SCHEMA working IS 'Working tables for locations and exposure calculations';
 COMMENT ON TABLE backbone.data_source IS 'Metadata about external data sources from JSON-LD';
 COMMENT ON TABLE backbone.variable_source IS 'Individual variables/attributes tracked in data sources';
+COMMENT ON TABLE backbone.geom_index IS 'A list of loaded geometry tables';
 COMMENT ON TABLE backbone.geom_template IS 'Geometry records from external data sources';
+COMMENT ON TABLE backbone.attr_index IS 'A list of loaded attributes tables';
 COMMENT ON TABLE backbone.attr_template IS 'Attribute values associated with geometries';
 COMMENT ON TABLE working.location IS 'Geocoded location records';
 COMMENT ON TABLE working.location_history IS 'Person-location-time relationships';
@@ -457,3 +527,4 @@ ALTER TABLE vocabulary.drug_strength
 \i /sql/03_location_ingestion_functions.sql
 \i /sql/04_spatial_join_functions.sql
 \i /sql/05_data_source_retrieval_functions.sql
+\i /sql/06_gdsc_catalog_functions.sql

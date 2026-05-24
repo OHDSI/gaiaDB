@@ -29,12 +29,16 @@ RUN cd /tmp && \
     cd / && \
     rm -rf /tmp/plsh
 
+# Create required directories
+# TODO: we may want to better locate these
+RUN mkdir -p /csv /sql /data /extras /run
+RUN chown 70:70 /csv /sql /data /extras /run
+
+USER postgres
+
 # Runtime defaults — override with -e at docker run or in docker-compose
 ENV INIT_WITH_CATALOG=TRUE
 ENV INIT_WITH_DATASOURCE_MOUNT=FALSE
-
-# Create required directories
-RUN mkdir -p /csv /sql /data /extras
 
 ## Download vocabulary CSV files from CVB repository
 #RUN wget -O /csv/gis_vocabulary_fragment.csv https://raw.githubusercontent.com/TuftsCTSI/CVB/refs/heads/main/GIS/Ontology/vocabulary_delta.csv

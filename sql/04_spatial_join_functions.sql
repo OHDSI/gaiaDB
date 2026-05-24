@@ -115,15 +115,15 @@ BEGIN
                     %L::integer AS value_as_concept_id
             ) att
             INNER JOIN (
-                SELECT %I, wgs_geom, 1 AS join_all
+                SELECT %I, geom, 1 AS join_all
                 FROM %s
             ) geo ON att.join_all = geo.join_all
             JOIN working.location_merge gol
                 ON %s(
                     gol.geom,
                     CASE
-                        WHEN %L > 0 THEN ST_Buffer(geo.wgs_geom::geography, %L)::geometry
-                        ELSE geo.wgs_geom
+                        WHEN %L > 0 THEN ST_Buffer(geo.geom::geography, %L)::geometry
+                        ELSE geo.geom
                     END
                 )
                 AND (
@@ -209,7 +209,7 @@ BEGIN
                     %L::integer AS value_as_concept_id
             ) att
             INNER JOIN (
-                SELECT a.%I, b.wgs_geom, 1 AS join_all
+                SELECT a.%I, b.geom, 1 AS join_all
                 FROM %s a
                 INNER JOIN %s b ON a.%I = b.%I
             ) geo ON att.join_all = geo.join_all
@@ -217,8 +217,8 @@ BEGIN
                 ON %s(
                     gol.geom,
                     CASE
-                        WHEN %L > 0 THEN ST_Buffer(geo.wgs_geom::geography, %L)::geometry
-                        ELSE geo.wgs_geom
+                        WHEN %L > 0 THEN ST_Buffer(geo.geom::geography, %L)::geometry
+                        ELSE geo.geom
                     END
                 )
                 AND (

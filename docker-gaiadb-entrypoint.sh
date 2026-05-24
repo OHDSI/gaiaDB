@@ -22,20 +22,39 @@ elif [ "$CATALOG_FLAG" = "TRUE" ]; then
     mkdir -p /data
     cp -r /tmp/gaiaCatalog/datastore/data/. /data/
     rm -rf /tmp/gaiaCatalog
+    chown -R 70:70 /data/
     echo "[gaiaDB] gaiaCatalog data loaded into /data"
 
 else
     echo "[gaiaDB] INIT_WITH_CATALOG=FALSE — copying bundled example sources from /extras into /data..."
     mkdir -p /data
     cp -r /extras/. /data/
+    chown -R 70:70 /data/
     echo "[gaiaDB] Example sources loaded into /data"
 fi
 
 # ---------------------------------------------------------------------------
 # Postgres authentication
 # ---------------------------------------------------------------------------
-echo "${POSTGRES_HOST:-gaia-db}:${POSTGRES_PORT}:${POSTGRES_DB}:${POSTGRES_USER}:$(cat "${PG_PASSWORD_FILE}")" > ~/.pgpass
+# if from docker-compose 
+if [ -z "${POSTGRES_PASSWORD}" ]; then
+    export POSTGRES_PASSWORD=$(cat $POSTGRES_PASSWORD_FILE)
+    unset POSTGRES_PASSWORD_FILE
+fi
+
+# if from docker-compose
+if [ -z "${DB_AUTHENTICATOR_PASSWORD}" ]; then 
+    export DB_AUTHENTICATOR_PASSWORD=$(cat $AUTHENTICATOR_PASSWORD_FILE)
+    unset AUTHENTICATOR_PASSWORD_FILE
+fi
+
+# TODO handle all API keys, perhaps from abstracted list somewhere ...
+
+echo "${POSTGRES_HOST:-gaia-db}:${POSTGRES_PORT}:${POSTGRES_DB}:${POSTGRES_USER}:${POSTGRES_PASSWORD}" > ~/.pgpass
 chmod 0600 ~/.pgpass
+chown 70:70 ~/.pgpass
+echo "[gaiaDB] postgres authentication set"
+
 
 # Hand off to the official PostgreSQL entrypoint
 exec bash /usr/local/bin/docker-entrypoint.sh postgres

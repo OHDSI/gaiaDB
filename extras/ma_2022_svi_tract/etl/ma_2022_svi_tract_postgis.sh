@@ -6,18 +6,16 @@
 # Data source: https://svi.cdc.gov/Documents/Data/2022/db/states/Massachusetts.zip
 # Destination postGIS table: ma_2022_svi_tract
 #
-# Created by etl() on 2026-02-12 10:25:43
+# Created by etl() on 2026-05-23 15:07:15
 # Do not edit directly
 
-export PGPASSWORD=$(cat $POSTGRES_PASSWORD_FILE)
-export POSTGRES_PASSWORD=$(cat $POSTGRES_PASSWORD_FILE)
 # remove duplicate points and make geometries valid:
-psql -d $POSTGRES_DB -U $POSTGRES_USER -p $POSTGRES_PORT -h $POSTGRES_HOST -c "
+psql -d $POSTGRES_DB -U $POSTGRES_USER -p $POSTGRES_PORT -h gaia-db -c "
 UPDATE ma_2022_svi_tract
   SET geom=ST_MakeValid(ST_RemoveRepeatedPoints(geom));"
 
 # add local geometry column and reproject existing geometries into local EPSG:
-psql -d $POSTGRES_DB -U $POSTGRES_USER -p $POSTGRES_PORT -h $POSTGRES_HOST -c "
+psql -d $POSTGRES_DB -U $POSTGRES_USER -p $POSTGRES_PORT -h gaia-db -c "
 SELECT AddGeometryColumn (
   'ma_2022_svi_tract',
   'geom_local', 26986, 'multipolygon', 2

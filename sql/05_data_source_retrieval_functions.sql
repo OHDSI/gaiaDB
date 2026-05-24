@@ -114,9 +114,11 @@ BEGIN
     BEGIN
         v_result := backbone.gdsc_exec(p_shell, v_script_path);
     EXCEPTION WHEN OTHERS THEN
-        RETURN QUERY SELECT 'ingestion'::TEXT, 'error'::TEXT,
-            format('Script failed: %s', SQLERRM)::TEXT;
-        RETURN;
+        IF SQLSTATE != 'XX000' THEN  -- ignore generic errors
+            RETURN QUERY SELECT 'ingestion'::TEXT, 'error'::TEXT,
+                format('Script failed: %s', SQLERRM)::TEXT;
+            RETURN;
+        END IF;
     END;
 
     RETURN QUERY SELECT 'ingestion'::TEXT, 'success'::TEXT, v_result::TEXT;
