@@ -70,6 +70,8 @@ Three mutually exclusive modes are controlled by environment variables. `INIT_WI
 
 ### Using a local data directory (bind-mount)
 
+Note that you may need to adjust permissions on your local directory structure that you are going to mount. The directory structure will need to have the equivalent of 755 permissions for a non-root user (drwxr-xr-x).
+
 ```bash
 docker run -d \
   -e INIT_WITH_DATASOURCE_MOUNT=TRUE \
