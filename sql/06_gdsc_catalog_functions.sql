@@ -255,7 +255,7 @@ BEGIN
 		SELECT EXISTS (
 		   SELECT FROM backbone.attr_index 
 		   WHERE variable_name = ''%s''
-		   AND table_name   = ''%s''
+		   AND table_name = ''%s''
 		);', 
 		(params->>'variable_id')::text, 
 		(params->>'table_id')::text
@@ -299,11 +299,13 @@ BEGIN
 			'working'
 		);
 
-		-- get the attr_index_id for the table
+		-- get the attr_index_id for the table and variable
 		EXECUTE format('
 			SELECT attr_index_id 
 			FROM backbone.attr_index
-			WHERE table_name = ''%s'';', 
+			WHERE variable_name = ''%s''
+			AND table_name = ''%s'';', 
+			(params->>'variable_id')::text, 
 			(params->>'table_id')::text
 		) INTO attr_id;	
 
