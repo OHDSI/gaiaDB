@@ -50,7 +50,16 @@ fi
 
 # TODO handle all API keys, perhaps from abstracted list somewhere ...
 
-echo "${POSTGRES_HOST:-gaia-db}:${POSTGRES_PORT}:${POSTGRES_DB}:${POSTGRES_USER}:${POSTGRES_PASSWORD}" > ~/.pgpass
+# ETL scripts (run in-container via plsh/gdsc_exec) always connect to this
+# same container's own Postgres, never to a separate "gaia-db" host -- so the
+# .pgpass host field is '*' (match any host) rather than a specific name that
+# has to be kept in sync with whatever host= each script happens to use.
+# POSTGRES_PORT defaults to 5432 since GDAL's PG: connection-string parser
+# (used by ogr2ogr in the ETL scripts) fails hard on an empty port= rather
+# than falling back to the default the way plain libpq does.
+export POSTGRES_PORT="${POSTGRES_PORT:-5432}"
+
+echo "*:${POSTGRES_PORT}:${POSTGRES_DB}:${POSTGRES_USER}:${POSTGRES_PASSWORD}" > ~/.pgpass
 chmod 0600 ~/.pgpass
 chown 70:70 ~/.pgpass
 echo "[gaiaDB] postgres authentication set"

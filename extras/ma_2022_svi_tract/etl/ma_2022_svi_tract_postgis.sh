@@ -9,13 +9,20 @@
 # Created by etl() on 2026-05-23 15:07:15
 # Do not edit directly
 
+# NOTE: manually patched -- two fixes:
+# 1) host='gaia-db' -> host='localhost'. See ma_2022_svi_tract_osgeo.sh for why.
+# 2) -p $POSTGRES_PORT -> -p "${POSTGRES_PORT:-5432}". If POSTGRES_PORT is
+#    unset/empty, the unquoted expansion vanishes entirely from the argument
+#    list (word splitting), so -p would consume the next flag (-h) as its
+#    value instead of a port number.
+
 # remove duplicate points and make geometries valid:
-psql -d $POSTGRES_DB -U $POSTGRES_USER -p $POSTGRES_PORT -h gaia-db -c "
+psql -d $POSTGRES_DB -U $POSTGRES_USER -p "${POSTGRES_PORT:-5432}" -h localhost -c "
 UPDATE ma_2022_svi_tract
   SET geom=ST_MakeValid(ST_RemoveRepeatedPoints(geom));"
 
 # add local geometry column and reproject existing geometries into local EPSG:
-psql -d $POSTGRES_DB -U $POSTGRES_USER -p $POSTGRES_PORT -h gaia-db -c "
+psql -d $POSTGRES_DB -U $POSTGRES_USER -p "${POSTGRES_PORT:-5432}" -h localhost -c "
 SELECT AddGeometryColumn (
   'ma_2022_svi_tract',
   'geom_local', 26986, 'multipolygon', 2

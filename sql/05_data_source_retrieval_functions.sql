@@ -1,4 +1,4 @@
--- Data Source Retrieval and Ingestion Functions
+ -- Data Source Retrieval and Ingestion Functions
 --
 -- backbone.gdsc_exec is defined here because it is only used by this file.
 --
@@ -114,11 +114,18 @@ BEGIN
     BEGIN
         v_result := backbone.gdsc_exec(p_shell, v_script_path);
     EXCEPTION WHEN OTHERS THEN
-        IF SQLSTATE != 'XX000' THEN  -- ignore generic errors
-            RETURN QUERY SELECT 'ingestion'::TEXT, 'error'::TEXT,
-                format('Script failed: %s', SQLERRM)::TEXT;
-            RETURN;
-        END IF;
+        -- Do not swallow SQLSTATE XX000: plsh raises it both for a script's
+        -- non-empty stderr (harmless warnings included) and for a genuinely
+        -- failed/killed run, and the two are indistinguishable from SQLSTATE
+        -- alone. Silently treating XX000 as non-fatal here previously let a
+        -- failed ETL script report status='success', so ingest_datasource
+        -- would proceed into the postgis step against a table that was
+        -- never created. ETL scripts should redirect noisy subprocess
+        -- stderr (e.g. ogr2ogr) to a log file instead of leaving it on
+        -- plsh's captured pipe -- see extras/*/etl/*_osgeo.sh.
+        RETURN QUERY SELECT 'ingestion'::TEXT, 'error'::TEXT,
+            format('Script failed: %s', SQLERRM)::TEXT;
+        RETURN;
     END;
 
     RETURN QUERY SELECT 'ingestion'::TEXT, 'success'::TEXT, v_result::TEXT;

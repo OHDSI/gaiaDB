@@ -156,6 +156,22 @@ The JSON-LD file drives metadata ingestion. Key fields used:
 
 ---
 
+## End-to-End Demo:
+
+
+```sql
+SELECT * FROM backbone.ingest_datasource('ma_2022_svi_tract');
+select * from working.load_location_csv('/data/csv/LOCATION_MA.csv');
+SELECT * from working.load_location_history_csv('/data/csv/LOCATION_HISTORY.csv');
+SELECT * FROM backbone.gdsc_load_all_variables(
+      p_table_id        => 'ma_2022_svi_tract',
+      p_geom_label      => 'location',
+      p_variable_nodata => -999,
+      p_source          => 'CDC/ATSDR SVI 2022'
+  );
+select * from working.spatial_join_all_from_catalog('ma_2022_svi_tract');
+```
+
 ## Support
 
 Please use the [GitHub issue tracker](https://github.com/OHDSI/gaiaDB/issues) for bugs and feature requests.

@@ -128,14 +128,20 @@ CREATE OR REPLACE FUNCTION backbone.gdsc_load_variable(
     VOLATILE PARALLEL UNSAFE
 AS $BODY$
 DECLARE
-	geom_entry_exists boolean;
-	attr_entry_exists boolean;
-	table_pk text;
-	geom_id int4;
-	attr_id int4;
-	attr_instance_exists boolean;
-	geom_instance varchar := 'None';
-	attr_instance varchar := 'None';
+	geom_entry_exists    boolean;
+	attr_entry_exists    boolean;
+	geom_table_exists    boolean;
+	geom_table_populated boolean;
+	attr_table_exists    boolean;
+	attr_rows_loaded     boolean;
+	table_pk             text;
+	geom_id              int4;
+	attr_id              int4;
+	geom_table_name      text;
+	attr_table_name      text;
+	attr_seq_name        text;
+	geom_instance        varchar := 'None';
+	attr_instance        varchar := 'None';
 
 BEGIN
 
@@ -143,238 +149,171 @@ BEGIN
 	-- TODO: nodata values
 	-- TODO: geom type and conceptID??
 	-- TODO: put this function in backbone and adjust
-	
+
+	geom_table_name := 'geom_' || (params->>'table_id')::text;
+	attr_table_name := 'attr_' || (params->>'table_id')::text;
+	attr_seq_name   := attr_table_name || '_attr_record_id_seq';
+
 	-- get the primary key for the table
-	-- params := params->'params';
-
 	RAISE NOTICE 'getting pk for table: %', params->>'table_id';
-	EXECUTE format('
-		SELECT att.attname AS pkey
-		FROM pg_catalog.pg_constraint con
-		JOIN pg_catalog.pg_class rel ON rel.oid = con.conrelid
-		JOIN pg_catalog.pg_namespace nsp ON nsp.oid = con.connamespace
-		JOIN pg_catalog.pg_attribute att ON att.attrelid = con.conrelid AND att.attnum = ANY(con.conkey)
-		WHERE con.contype = ''p''
-		  AND rel.relname = ''%s''
-		  AND nsp.nspname = ''public'';', 
-		params->>'table_id'
-	) INTO table_pk;
-    RAISE NOTICE 'PK for table: %', table_pk;
+	SELECT att.attname
+	INTO   table_pk
+	FROM pg_catalog.pg_constraint con
+	JOIN pg_catalog.pg_class rel ON rel.oid = con.conrelid
+	JOIN pg_catalog.pg_namespace nsp ON nsp.oid = con.connamespace
+	JOIN pg_catalog.pg_attribute att ON att.attrelid = con.conrelid AND att.attnum = ANY(con.conkey)
+	WHERE con.contype = 'p'
+	  AND rel.relname = (params->>'table_id')::text
+	  AND nsp.nspname = 'public';
+	RAISE NOTICE 'PK for table: %', table_pk;
 
-	-- check for existing geom index entry and create one if none exists
-	EXECUTE format('
-		SELECT EXISTS (
-		   SELECT FROM backbone.geom_index 
-		   WHERE table_name   = ''%s''
-		);', 
-		(params->>'table_id')::text
+	-- =================================================================
+	-- geom_index catalog row -- create if missing. May already exist,
+	-- e.g. registered by backbone.ingest_jsonld_variables() at metadata
+	-- ingestion time, before this table's data was ever loaded.
+	-- =================================================================
+	SELECT EXISTS (
+		SELECT 1 FROM backbone.geom_index WHERE table_name = (params->>'table_id')::text
 	) INTO geom_entry_exists;
 
 	IF NOT geom_entry_exists THEN
-
-		-- create geom index entry
 		RAISE NOTICE 'creating geom index entry';
-		EXECUTE format('
-			INSERT INTO backbone.geom_index (
-				geom_type_source_value,
-				table_name,
-				table_desc,
-				database_schema
-			)
-			VALUES (
-				''%s'',''%s'',''%s'',''%s''
-			);', 
-			(params->>'geom_type')::text, 
-			(params->>'table_id')::text, 
-			(params->>'table_description')::text, 
+		INSERT INTO backbone.geom_index (
+			geom_type_source_value, table_name, table_desc, database_schema
+		) VALUES (
+			(params->>'geom_type')::text,
+			(params->>'table_id')::text,
+			(params->>'table_description')::text,
 			'working'
 		);
-
-		-- get the geom_index_id for the table
-		EXECUTE format('
-			SELECT geom_index_id 
-			FROM backbone.geom_index
-			WHERE table_name = ''%s'';', 
-			(params->>'table_id')::text
-		) INTO geom_id;	
-
-		-- create geom table
-		RAISE NOTICE 'creating geom table from template: %', (params->>'table_id')::text;
-		EXECUTE format('
-			CREATE TABLE working.geom_%s AS TABLE backbone.geom_template;
-			ALTER TABLE working.geom_%s ADD PRIMARY KEY (geom_record_id);
-			ALTER TABLE working.geom_%s ADD CONSTRAINT fk_geom_%s_geom_index
-			  FOREIGN KEY (geom_index_id)
-			  REFERENCES backbone.geom_index (geom_index_id);', 
-			(params->>'table_id')::text, 
-			(params->>'table_id')::text, 
-			(params->>'table_id')::text, 
-			(params->>'table_id')::text
-		);
-		-- create constraints for PK and FK relations??
-
-		-- insert geom values into the geom table
-		RAISE NOTICE 'insert into geom table: %', geom_id;
-		EXECUTE format('
-			INSERT INTO working.geom_%s (
-			  geom_record_id,
-			  geom_index_id,
-			  geom_name,
-			  geom_wgs84,
-			  geom_local_epsg,
-			  geom_local_value
-			)
-			SELECT 
-			  %s as geom_record_id,
-			  %s as geom_index_id,
-			  %s as geom_name,
-			  ST_Transform(geom, 4326) as geom_wgs84,
-			  ST_SRID(geom_local) as geom_local_epsg,
-			  geom_local as geom_local_value
-			FROM public.%s;', 
-			(params->>'table_id')::text, 
-			table_pk, geom_id, 
-			(params->>'geom_label')::text, 
-			(params->>'table_id')::text
-		);
-
 	END IF;
 
-	geom_instance := 'geom_' || (params->>'table_id')::text;
+	SELECT geom_index_id INTO geom_id
+	FROM backbone.geom_index
+	WHERE table_name = (params->>'table_id')::text;
 
-	-- get the geom_index_id for the table
-	EXECUTE format('
-		SELECT geom_index_id 
-		FROM backbone.geom_index
-		WHERE table_name = ''%s'';',
-		(params->>'table_id')::text
-	) INTO geom_id;	
+	geom_instance := geom_table_name;
 
-	-- check for existing attr index entry
-	EXECUTE format('
-		SELECT EXISTS (
-		   SELECT FROM backbone.attr_index 
-		   WHERE variable_name = ''%s''
-		   AND table_name = ''%s''
-		);', 
-		(params->>'variable_id')::text, 
-		(params->>'table_id')::text
+	-- =================================================================
+	-- working.geom_<table_id> instance table -- create the schema if
+	-- missing, then populate only if it's still empty. Checked
+	-- separately from the catalog row above so a pre-registered
+	-- geom_index entry can't cause data loading to be silently skipped.
+	-- =================================================================
+	SELECT EXISTS (
+		SELECT 1 FROM information_schema.tables
+		WHERE table_schema = 'working' AND table_name = geom_table_name
+	) INTO geom_table_exists;
+
+	IF NOT geom_table_exists THEN
+		RAISE NOTICE 'creating geom table from template: %', geom_table_name;
+		EXECUTE format('CREATE TABLE working.%I AS TABLE backbone.geom_template', geom_table_name);
+		EXECUTE format('ALTER TABLE working.%I ADD PRIMARY KEY (geom_record_id)', geom_table_name);
+		EXECUTE format(
+			'ALTER TABLE working.%I ADD CONSTRAINT %I FOREIGN KEY (geom_index_id) REFERENCES backbone.geom_index (geom_index_id)',
+			geom_table_name, 'fk_' || geom_table_name || '_geom_index'
+		);
+	END IF;
+
+	EXECUTE format('SELECT EXISTS (SELECT 1 FROM working.%I LIMIT 1)', geom_table_name)
+		INTO geom_table_populated;
+
+	IF NOT geom_table_populated THEN
+		RAISE NOTICE 'insert into geom table: %', geom_id;
+		EXECUTE format(
+			'INSERT INTO working.%I (geom_record_id, geom_index_id, geom_name, geom_wgs84, geom_local_epsg, geom_local_value)
+			 SELECT %I, %L, %I, ST_Transform(geom, 4326), ST_SRID(geom_local), geom_local
+			 FROM public.%I',
+			geom_table_name,
+			table_pk, geom_id, (params->>'geom_label')::text,
+			(params->>'table_id')::text
+		);
+	END IF;
+
+	-- =================================================================
+	-- attr_index catalog row -- create if missing (see geom_index note).
+	-- =================================================================
+	SELECT EXISTS (
+		SELECT 1 FROM backbone.attr_index
+		WHERE variable_name = (params->>'variable_id')::text
+		  AND table_name = (params->>'table_id')::text
 	) INTO attr_entry_exists;
 
-	-- create the attr index entry and the associated attr table
 	IF NOT attr_entry_exists THEN
-
 		RAISE NOTICE 'creating attr index entry';
-		EXECUTE format('
-			INSERT INTO backbone.attr_index (
-				geom_index_id,
-				table_name,
-				variable_name,
-				variable_desc,
-				attr_concept_id,
-				unit_concept_id,
-				unit_source_value,
-				attr_start_date,
-				attr_end_date,
-				attr_no_value_as_number,
-				attr_no_value_as_string,
-				attr_source_value,
-				database_schema
-			)
-			VALUES (
-				%s,''%s'',''%s'',''%s'',%s,%s,''%s'',''%s'',''%s'',%s,''%s'',''%s'',''%s''
-			);',
-			geom_id, 
-			(params->>'table_id')::text, 
-			(params->>'variable_id')::text, 
-			(params->>'description')::text, 
-			NULLIF((params->>'concept_id')::int,null)::int,
-			NULLIF((params->>'concept_id')::int,null)::int,
-			(params->>'unit')::text, 
-			(params->>'start_date')::date, 
-			(params->>'end_date')::date, 
-			(params->>'variable_nodata')::numeric, 
-			(params->>'variable_nodata')::text, 
+		INSERT INTO backbone.attr_index (
+			geom_index_id, table_name, variable_name, variable_desc,
+			attr_concept_id, unit_concept_id, unit_source_value,
+			attr_start_date, attr_end_date,
+			attr_no_value_as_number, attr_no_value_as_string,
+			attr_source_value, database_schema
+		) VALUES (
+			geom_id,
+			(params->>'table_id')::text,
+			(params->>'variable_id')::text,
+			(params->>'description')::text,
+			NULLIF((params->>'concept_id')::int, NULL)::int,
+			NULLIF((params->>'concept_id')::int, NULL)::int,
+			(params->>'unit')::text,
+			(params->>'start_date')::date,
+			(params->>'end_date')::date,
+			(params->>'variable_nodata')::numeric,
+			(params->>'variable_nodata')::text,
 			(params->>'source')::text,
 			'working'
 		);
+	END IF;
 
-		-- get the attr_index_id for the table and variable
-		EXECUTE format('
-			SELECT attr_index_id 
-			FROM backbone.attr_index
-			WHERE variable_name = ''%s''
-			AND table_name = ''%s'';', 
-			(params->>'variable_id')::text, 
+	SELECT attr_index_id INTO attr_id
+	FROM backbone.attr_index
+	WHERE variable_name = (params->>'variable_id')::text
+	  AND table_name = (params->>'table_id')::text;
+
+	attr_instance := attr_table_name;
+
+	-- =================================================================
+	-- working.attr_<table_id> instance table -- shared across every
+	-- variable loaded from this table_id, so the table itself is
+	-- created once; rows are keyed by attr_index_id, so THIS variable's
+	-- values are (re)loaded independently of whether the shared table
+	-- or another variable's rows already exist.
+	-- =================================================================
+	SELECT EXISTS (
+		SELECT 1 FROM information_schema.tables
+		WHERE table_schema = 'working' AND table_name = attr_table_name
+	) INTO attr_table_exists;
+
+	IF NOT attr_table_exists THEN
+		EXECUTE format('CREATE TABLE working.%I AS TABLE backbone.attr_template', attr_table_name);
+		EXECUTE format('CREATE SEQUENCE working.%I OWNED BY working.%I.attr_record_id', attr_seq_name, attr_table_name);
+		EXECUTE format('ALTER TABLE working.%I ALTER COLUMN attr_record_id SET DEFAULT nextval(%L)', attr_table_name, 'working.' || attr_seq_name);
+		EXECUTE format('ALTER TABLE working.%I ADD PRIMARY KEY (attr_record_id)', attr_table_name);
+		EXECUTE format(
+			'ALTER TABLE working.%I ADD CONSTRAINT %I FOREIGN KEY (attr_index_id) REFERENCES backbone.attr_index (attr_index_id)',
+			attr_table_name, 'fk_' || attr_table_name || '_attr_index'
+		);
+		EXECUTE format(
+			'ALTER TABLE working.%I ADD CONSTRAINT %I FOREIGN KEY (geom_record_id) REFERENCES working.%I (geom_record_id)',
+			attr_table_name, 'fk_' || attr_table_name || '_' || geom_table_name, geom_table_name
+		);
+	END IF;
+
+	EXECUTE format('SELECT EXISTS (SELECT 1 FROM working.%I WHERE attr_index_id = %L)', attr_table_name, attr_id)
+		INTO attr_rows_loaded;
+
+	IF NOT attr_rows_loaded THEN
+		EXECUTE format(
+			'INSERT INTO working.%I (attr_index_id, geom_record_id, value_as_number, value_as_string)
+			 SELECT %L, %I, %I, TO_CHAR(%I, ''99999999990.99'')
+			 FROM public.%I',
+			attr_table_name,
+			attr_id, table_pk, (params->>'variable_id')::text, (params->>'variable_id')::text,
 			(params->>'table_id')::text
-		) INTO attr_id;	
-
-		-- check if the attr instance table already exists
-		EXECUTE format('
-			SELECT EXISTS (
-				SELECT FROM information_schema.tables 
-				WHERE  table_schema = ''working''
-				  AND table_name = ''attr_%s''
-			);', 
-			(params->>'table_id')::text
-		) INTO attr_instance_exists;		
-
-		IF NOT attr_instance_exists THEN
-			-- create attr table if not already present
-			EXECUTE format('
-				CREATE TABLE working.attr_%s AS TABLE backbone.attr_template;
-				CREATE SEQUENCE working.attr_%s_attr_record_id_seq OWNED BY working.attr_%s.attr_record_id;
-				ALTER TABLE working.attr_%s ALTER COLUMN attr_record_id SET DEFAULT nextval(''working.attr_%s_attr_record_id_seq'');
-				ALTER TABLE working.attr_%s ADD PRIMARY KEY (attr_record_id);
-				ALTER TABLE working.attr_%s ADD CONSTRAINT fk_attr_%s_attr_index
-				  FOREIGN KEY (attr_index_id)
-				  REFERENCES backbone.attr_index (attr_index_id);
-				ALTER TABLE working.attr_%s ADD CONSTRAINT fk_attr_%s_geom_%s
-				  FOREIGN KEY (geom_record_id)
-				  REFERENCES working.geom_%s (geom_record_id);', 
-				(params->>'table_id')::text, 
-				(params->>'table_id')::text, 
-				(params->>'table_id')::text, 
-				(params->>'table_id')::text, 
-				(params->>'table_id')::text, 
-				(params->>'table_id')::text, 
-				(params->>'table_id')::text, 
-				(params->>'table_id')::text, 
-				(params->>'table_id')::text, 
-				(params->>'table_id')::text, 
-				(params->>'table_id')::text, 
-				(params->>'table_id')::text
-			);
-			-- create constraints for PK and FK relations??
-		END IF;
-
-		-- insert attribute values into the attr table
-		EXECUTE format('
-			INSERT INTO working.attr_%s (
-			  attr_index_id,
-			  geom_record_id,
-			  value_as_number,
-			  value_as_string
-			)
-			SELECT 
-			  $1 as attr_index_id,
-			  %I as geom_record_id,
-			  %I as value_as_number,
-			  TO_CHAR(%s,''99999999990.99'') as value_as_string
-			FROM public.%s;', 
-			(params->>'table_id')::text, 
-			table_pk, 
-			(params->>'variable_id')::text, 
-			(params->>'variable_id')::text, 
-			(params->>'table_id')::text
-		) USING attr_id;
-
-		attr_instance := 'attr_' || (params->>'table_id')::text;
-
+		);
 	END IF;
 
 	RETURN '{"geom": "' || geom_instance || '","attr": "' || attr_instance || '"}';
-	
+
 END;
 $BODY$;
 
@@ -383,3 +322,85 @@ ALTER FUNCTION backbone.gdsc_load_variable(jsonb)
 
 COMMENT ON FUNCTION backbone.gdsc_load_variable(jsonb)
     IS 'transform staged table to OHDSI GIS schema and populate index tables';
+
+
+-- * - * - * - * - * - * - * - * - * -
+-- FUNCTION gdsc_load_all_variables()
+--   Call gdsc_load_variable() once for every variable already registered
+--   in backbone.attr_index for a table_id (i.e. every variable
+--   ingest_jsonld_variables() found start/end dates for). Metadata fields
+--   (description, concept_id, unit, dates, geom_type, table_desc) are
+--   pulled from attr_index/geom_index rather than re-specified per call.
+-- * - * - * - * - * - * - * - * - * -
+
+-- FUNCTION: backbone.gdsc_load_all_variables(text, text, numeric, text)
+
+-- DROP FUNCTION IF EXISTS backbone.gdsc_load_all_variables(text, text, numeric, text);
+
+CREATE OR REPLACE FUNCTION backbone.gdsc_load_all_variables(
+    p_table_id        text,
+    p_geom_label      text,
+    p_variable_nodata numeric DEFAULT NULL,
+    p_source          text DEFAULT NULL
+)
+    RETURNS TABLE(
+        variable_name text,
+        status        text,
+        message       text
+    )
+    LANGUAGE 'plpgsql'
+    COST 100
+    VOLATILE PARALLEL UNSAFE
+AS $BODY$
+DECLARE
+    v_row    RECORD;
+    v_result json;
+BEGIN
+    FOR v_row IN
+        SELECT ai.variable_name, ai.variable_desc, ai.attr_concept_id, ai.unit_source_value,
+               ai.attr_start_date, ai.attr_end_date, gi.geom_type_source_value, gi.table_desc
+        FROM backbone.attr_index ai
+        JOIN backbone.geom_index gi ON gi.geom_index_id = ai.geom_index_id
+        WHERE ai.table_name = p_table_id
+        ORDER BY ai.variable_name
+    LOOP
+        BEGIN
+            v_result := backbone.gdsc_load_variable(
+                jsonb_build_object(
+                    'table_id',          p_table_id,
+                    'geom_type',         v_row.geom_type_source_value,
+                    'table_description', v_row.table_desc,
+                    'geom_label',        p_geom_label,
+                    'variable_id',       v_row.variable_name,
+                    'description',       v_row.variable_desc,
+                    'concept_id',        v_row.attr_concept_id,
+                    'unit',              v_row.unit_source_value,
+                    'start_date',        v_row.attr_start_date,
+                    'end_date',          v_row.attr_end_date,
+                    'variable_nodata',   p_variable_nodata,
+                    'source',            COALESCE(p_source, v_row.table_desc)
+                )
+            );
+            variable_name := v_row.variable_name;
+            status  := 'success';
+            message := v_result::text;
+            RETURN NEXT;
+        EXCEPTION WHEN OTHERS THEN
+            variable_name := v_row.variable_name;
+            status  := 'error';
+            message := SQLERRM;
+            RETURN NEXT;
+        END;
+    END LOOP;
+
+    IF NOT FOUND THEN
+        RAISE WARNING 'No backbone.attr_index rows found for table_id "%". Has ingest_jsonld_variables() registered this data source''s variables yet?', p_table_id;
+    END IF;
+END;
+$BODY$;
+
+ALTER FUNCTION backbone.gdsc_load_all_variables(text, text, numeric, text)
+    OWNER TO postgres;
+
+COMMENT ON FUNCTION backbone.gdsc_load_all_variables(text, text, numeric, text)
+    IS 'Run gdsc_load_variable() for every variable registered in backbone.attr_index for a table_id, reporting per-variable success/error';

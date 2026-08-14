@@ -58,6 +58,8 @@ COPY sql/01_init_schema.sql /docker-entrypoint-initdb.d/
 # Bundle example sources (used when INIT_WITH_CATALOG=FALSE)
 COPY extras/ /extras/
 
+COPY tests/ /tests/
+
 # copy entrypoint script
 COPY --chmod=0755 docker-gaiadb-entrypoint.sh /usr/local/bin/
 ENTRYPOINT ["/usr/local/bin/docker-gaiadb-entrypoint.sh"]

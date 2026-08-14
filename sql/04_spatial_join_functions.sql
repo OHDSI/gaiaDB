@@ -257,6 +257,190 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+CREATE OR REPLACE FUNCTION working.spatial_join_from_catalog(
+    p_variable_name TEXT,
+    p_table_id TEXT DEFAULT NULL,
+    p_spatial_operator TEXT DEFAULT 'st_within',
+    p_buffer_meters NUMERIC DEFAULT 0
+)
+RETURNS INTEGER AS $$
+DECLARE
+    v_sql TEXT;
+    v_attr_index_id INTEGER;
+    v_geom_index_id INTEGER;
+    v_attr_schema TEXT;
+    v_attr_table_name TEXT;
+    v_geom_schema TEXT;
+    v_geom_table_name TEXT;
+    v_attr_concept_id INTEGER;
+    v_unit_concept_id INTEGER;
+    v_attr_source_concept_id INTEGER;
+    v_attr_start_date DATE;
+    v_attr_end_date DATE;
+    v_count INTEGER;
+BEGIN
+    -- Locate the catalog entry for this variable (optionally scoped to one table_id,
+    -- since the same variable_name could in principle be loaded from multiple sources).
+    SELECT
+        ai.attr_index_id, ai.geom_index_id, ai.database_schema, 'attr_' || ai.table_name,
+        ai.attr_concept_id, ai.unit_concept_id, ai.attr_source_concept_id,
+        ai.attr_start_date, ai.attr_end_date
+    INTO
+        v_attr_index_id, v_geom_index_id, v_attr_schema, v_attr_table_name,
+        v_attr_concept_id, v_unit_concept_id, v_attr_source_concept_id,
+        v_attr_start_date, v_attr_end_date
+    FROM backbone.attr_index ai
+    WHERE ai.variable_name = p_variable_name
+      AND (p_table_id IS NULL OR ai.table_name = p_table_id)
+    ORDER BY ai.attr_index_id
+    LIMIT 1;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Variable "%" not found in backbone.attr_index%. Has it been loaded via backbone.gdsc_load_variable()?',
+            p_variable_name,
+            CASE WHEN p_table_id IS NOT NULL THEN format(' for table_id "%s"', p_table_id) ELSE '' END;
+    END IF;
+
+    SELECT gi.database_schema, 'geom_' || gi.table_name
+    INTO v_geom_schema, v_geom_table_name
+    FROM backbone.geom_index gi
+    WHERE gi.geom_index_id = v_geom_index_id;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'geom_index_id % (referenced by attr_index_id %) not found in backbone.geom_index', v_geom_index_id, v_attr_index_id;
+    END IF;
+
+    RAISE NOTICE 'Processing catalog spatial join for variable: % (attr_index_id: %, attr table: %.%, geom table: %.%)',
+        p_variable_name, v_attr_index_id, v_attr_schema, v_attr_table_name, v_geom_schema, v_geom_table_name;
+
+    v_sql := format($SQL$
+        INSERT INTO working.external_exposure(
+            location_id,
+            person_id,
+            exposure_concept_id,
+            exposure_start_date,
+            exposure_start_datetime,
+            exposure_end_date,
+            exposure_end_datetime,
+            exposure_type_concept_id,
+            exposure_relationship_concept_id,
+            exposure_source_concept_id,
+            exposure_source_value,
+            exposure_relationship_source_value,
+            dose_unit_source_value,
+            quantity,
+            modifier_source_value,
+            operator_concept_id,
+            value_as_number,
+            value_as_concept_id,
+            unit_concept_id
+        )
+        SELECT
+            gol.location_id,
+            CASE
+                WHEN gol.domain_id = 1147314 THEN gol.entity_id
+                ELSE 0
+            END AS person_id,
+            COALESCE(%1$L::integer, 0) AS exposure_concept_id,
+            GREATEST(%2$L::date, gol.start_date) AS exposure_start_date,
+            GREATEST(%2$L::timestamp, gol.start_date::timestamp) AS exposure_start_datetime,
+            LEAST(%3$L::date, gol.end_date) AS exposure_end_date,
+            LEAST(%3$L::timestamp, gol.end_date::timestamp) AS exposure_end_datetime,
+            0 AS exposure_type_concept_id,
+            0 AS exposure_relationship_concept_id,
+            %4$L::integer AS exposure_source_concept_id,
+            %5$L AS exposure_source_value,
+            CAST(NULL AS VARCHAR(50)) AS exposure_relationship_source_value,
+            CAST(NULL AS VARCHAR(50)) AS dose_unit_source_value,
+            CAST(NULL AS INTEGER) AS quantity,
+            CAST(NULL AS VARCHAR(50)) AS modifier_source_value,
+            CAST(NULL AS INTEGER) AS operator_concept_id,
+            att.value_as_number,
+            att.value_as_concept_id,
+            %12$L::integer AS unit_concept_id
+        FROM %6$I.%7$I att
+        JOIN %8$I.%9$I geo ON att.geom_record_id = geo.geom_record_id
+        JOIN working.location_merge gol
+            ON %10$s(
+                gol.geom,
+                CASE
+                    WHEN %11$L > 0 THEN ST_Buffer(geo.geom_wgs84::geography, %11$L)::geometry
+                    ELSE geo.geom_wgs84
+                END
+            )
+            AND (
+                gol.start_date BETWEEN %2$L::date AND %3$L::date
+                OR gol.end_date BETWEEN %2$L::date AND %3$L::date
+                OR (gol.start_date <= %2$L::date AND gol.end_date >= %3$L::date)
+            )
+        WHERE att.attr_index_id = %13$L
+    $SQL$,
+        v_attr_concept_id,          -- 1: exposure_concept_id
+        v_attr_start_date,          -- 2: exposure_start_date/datetime, date-range filter
+        v_attr_end_date,            -- 3: exposure_end_date/datetime, date-range filter
+        v_attr_source_concept_id,   -- 4: exposure_source_concept_id
+        p_variable_name,            -- 5: exposure_source_value
+        v_attr_schema,              -- 6: FROM attr instance schema
+        v_attr_table_name,          -- 7: FROM attr instance table
+        v_geom_schema,              -- 8: JOIN geom instance schema
+        v_geom_table_name,          -- 9: JOIN geom instance table
+        p_spatial_operator,         -- 10: spatial operator
+        p_buffer_meters,            -- 11: buffer check/value
+        v_unit_concept_id,          -- 12: unit_concept_id
+        v_attr_index_id             -- 13: restrict to this variable's rows in the shared attr_X table
+    );
+
+    RAISE NOTICE 'Executing catalog spatial join SQL...';
+    EXECUTE v_sql;
+
+    GET DIAGNOSTICS v_count = ROW_COUNT;
+
+    RAISE NOTICE 'Catalog spatial join complete. Inserted % exposure records for variable %', v_count, p_variable_name;
+
+    RETURN v_count;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Process spatial joins for every variable loaded (via gdsc_load_variable) under a given table_id
+CREATE OR REPLACE FUNCTION working.spatial_join_all_from_catalog(
+    p_table_id TEXT,
+    p_spatial_operator TEXT DEFAULT 'st_within',
+    p_buffer_meters NUMERIC DEFAULT 0
+)
+RETURNS TABLE(
+    variable_name TEXT,
+    records_created INTEGER
+) AS $$
+DECLARE
+    v_variable RECORD;
+    v_count INTEGER;
+BEGIN
+    FOR v_variable IN
+        -- attr_index.variable_name is varchar; RETURN QUERY below requires an
+        -- exact type match against RETURNS TABLE(variable_name TEXT, ...), so
+        -- cast here rather than at each RETURN QUERY site.
+        SELECT ai.variable_name::TEXT AS variable_name
+        FROM backbone.attr_index ai
+        WHERE ai.table_name = p_table_id
+        ORDER BY ai.variable_name
+    LOOP
+        BEGIN
+            v_count := working.spatial_join_from_catalog(
+                v_variable.variable_name,
+                p_table_id,
+                p_spatial_operator,
+                p_buffer_meters
+            );
+
+            RETURN QUERY SELECT v_variable.variable_name, v_count;
+        EXCEPTION WHEN OTHERS THEN
+            RAISE WARNING 'Error processing variable %: %', v_variable.variable_name, SQLERRM;
+            RETURN QUERY SELECT v_variable.variable_name, 0;
+        END;
+    END LOOP;
+END;
+$$ LANGUAGE plpgsql;
+
 -- Wrapper function for simple 1-point spatial joins
 CREATE OR REPLACE FUNCTION working.spatial_join_simple(
     p_variable_name TEXT,
@@ -361,6 +545,8 @@ END;
 $$ LANGUAGE plpgsql;
 
 COMMENT ON FUNCTION working.spatial_join_exposure IS 'Parameterized spatial join between locations and data source, supports both 1-point and 2-point geometries';
+COMMENT ON FUNCTION working.spatial_join_from_catalog IS 'Spatial join driven by backbone.attr_index/geom_index, joining the working.attr_<table_id>/geom_<table_id> instance tables created by backbone.gdsc_load_variable()';
+COMMENT ON FUNCTION working.spatial_join_all_from_catalog IS 'Run spatial_join_from_catalog for every variable loaded under a given table_id';
 COMMENT ON FUNCTION working.spatial_join_simple IS 'Simplified wrapper for 1-point spatial joins';
 COMMENT ON FUNCTION working.spatial_join_all_variables IS 'Process spatial joins for all variables in a data source';
 COMMENT ON FUNCTION working.exposure_statistics IS 'Get summary statistics about exposure calculations';

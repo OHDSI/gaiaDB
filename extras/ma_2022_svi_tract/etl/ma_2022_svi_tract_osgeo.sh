@@ -33,11 +33,29 @@ if [[ $exists ]]; then
 # does not exist
 else do_update=1; fi
 
+# NOTE: manually patched -- three fixes:
+# 1) ogr2ogr/wget stderr is redirected to a log file instead of being left
+#    connected to plsh's captured pipe. plsh reads a child's stdout to EOF
+#    before it starts draining stderr, and treats any non-empty stderr as a
+#    hard error; a statewide tract-level load emits enough GDAL warnings on
+#    stderr to exceed the pipe buffer, which deadlocks ogr2ogr in write()
+#    while plsh is still blocked reading stdout. See etl/etl.log.
+# 2) host='gaia-db' -> host='localhost'. ogr2ogr always runs inside the same
+#    container as the Postgres server it's loading into (via plsh), so
+#    'gaia-db' only resolves under a specific docker-compose setup with a
+#    service literally named gaia-db. localhost always resolves correctly
+#    since Postgres listens on 0.0.0.0.
+# 3) port=$POSTGRES_PORT -> port=${POSTGRES_PORT:-5432}. If POSTGRES_PORT
+#    isn't set, GDAL's PG: connection-string parser fails hard on the empty
+#    port= (unlike plain libpq, which falls back to the default) with
+#    "invalid integer value ... for connection option port", so ogr2ogr
+#    never even attempts to connect.
+
 # download if needed
 if [[ $do_update = 1 ]]; then
   (exit 1)
   until [[ "$?" == 0 ]]; do
-      wget -O download/ma_2022_svi_tract.zip 'https://svi.cdc.gov/Documents/Data/2022/db/states/Massachusetts.zip'
+      wget -O download/ma_2022_svi_tract.zip 'https://svi.cdc.gov/Documents/Data/2022/db/states/Massachusetts.zip' >> etl/etl.log 2>&1
   done
   unzip -d download download/ma_2022_svi_tract.zip && rm download/ma_2022_svi_tract.zip
   # record download datestamp
@@ -47,6 +65,6 @@ fi
 # load into postGIS
 (exit 1)
 until [[ "$?" == 0 ]]; do
-  ogr2ogr -lco GEOMETRY_NAME=geom -f PostgreSQL PG:"dbname=$POSTGRES_DB port=$POSTGRES_PORT user=$POSTGRES_USER password=$POSTGRES_PASSWORD host='gaia-db'" download/SVI2022_MASSACHUSETTS_tract.gdb -nlt multipolygon -nln ma_2022_svi_tract
+  ogr2ogr -lco GEOMETRY_NAME=geom -f PostgreSQL PG:"dbname=$POSTGRES_DB port=${POSTGRES_PORT:-5432} user=$POSTGRES_USER password=$POSTGRES_PASSWORD host='localhost'" download/SVI2022_MASSACHUSETTS_tract.gdb -nlt multipolygon -nln ma_2022_svi_tract >> etl/etl.log 2>&1
 done
 

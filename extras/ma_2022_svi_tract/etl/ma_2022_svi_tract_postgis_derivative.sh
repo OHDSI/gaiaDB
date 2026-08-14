@@ -12,8 +12,12 @@
 # Move into correct directory
 cd /data/ma_2022_svi_tract/
 
+# NOTE: manually patched -- host='gaia-db' -> host='localhost', and
+# -p $POSTGRES_PORT -> -p "${POSTGRES_PORT:-5432}". See ma_2022_svi_tract_osgeo.sh
+# for why.
+
 # Create pg_dump of table SQL in derivate directory on postgis.
-pg_dump -d $POSTGRES_DB -U $POSTGRES_USER -p $POSTGRES_PORT -h gaia-db -t ma_2022_svi_tract > derived/ma_2022_svi_tract.sql
+pg_dump -d $POSTGRES_DB -U $POSTGRES_USER -p "${POSTGRES_PORT:-5432}" -h localhost -t ma_2022_svi_tract > derived/ma_2022_svi_tract.sql
 
 # Create downloadable tarfile of SQL in derivative directory on postgis
 rm -f derived/ma_2022_svi_tract.sql.tar.gz

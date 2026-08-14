@@ -551,16 +551,16 @@ BEGIN
     PERFORM _assert('T10.1 create_datasource_table returns a non-null table reference',
         v_table_name IS NOT NULL);
 
-    -- Verify wgs_geom column exists (v_table_name is schema-qualified, e.g. "public"."updated_name")
+    -- Verify geom column exists (v_table_name is schema-qualified, e.g. "public"."updated_name")
     SELECT COUNT(*) INTO v_col_count
     FROM information_schema.columns
     WHERE table_schema = 'public'
       AND table_name = LOWER(REGEXP_REPLACE(
               (SELECT dataset_name FROM backbone.data_source WHERE data_source_uuid = v_uuid),
               '[^a-zA-Z0-9_]', '_', 'g'))
-      AND column_name = 'wgs_geom';
+      AND column_name = 'geom';
 
-    PERFORM _assert('T10.2 created table has wgs_geom geometry column',
+    PERFORM _assert('T10.2 created table has geom geometry column',
         v_col_count = 1);
 
     -- Verify variable columns created (area_sqmi → should map to TEXT since data_type is stored as JSONB string)
@@ -729,12 +729,12 @@ BEGIN
     EXECUTE $SQL$
         CREATE TEMP TABLE _test_svi_t14 (
             rpl_themes DOUBLE PRECISION,
-            wgs_geom   GEOMETRY(GEOMETRY, 4326)
+            geom       GEOMETRY(GEOMETRY, 4326)
         )
     $SQL$;
 
     EXECUTE $SQL$
-        INSERT INTO _test_svi_t14 (rpl_themes, wgs_geom)
+        INSERT INTO _test_svi_t14 (rpl_themes, geom)
         VALUES (0.75, ST_SetSRID(ST_MakeEnvelope(-120.0, 36.5, -119.5, 37.1), 4326))
     $SQL$;
 
@@ -773,6 +773,106 @@ END;
 $$;
 
 ROLLBACK TO t14;
+
+
+-- =========================================================================
+-- TEST 15: backbone.gdsc_load_variable() populates backbone.geom_index /
+--          backbone.attr_index and their working.geom_*/attr_* instance
+--          tables, and working.spatial_join_from_catalog() reads from that
+--          catalog (rather than raw caller-supplied table names) to
+--          populate EXTERNAL_EXPOSURE.
+-- =========================================================================
+SAVEPOINT t15;
+
+DO $$
+DECLARE
+    v_count  INTEGER;
+    v_result JSON;
+    v_row    RECORD;
+BEGIN
+    -- Raw staged table mimicking ogr2ogr/osgeo output: PK + geom + geom_local + attribute
+    CREATE TABLE public._test_svi_catalog (
+        gid SERIAL PRIMARY KEY,
+        rpl_themes DOUBLE PRECISION,
+        geom GEOMETRY(GEOMETRY, 4326),
+        geom_local GEOMETRY
+    );
+
+    INSERT INTO public._test_svi_catalog (rpl_themes, geom, geom_local)
+    VALUES (
+        0.75,
+        ST_SetSRID(ST_MakeEnvelope(-120.0, 36.5, -119.5, 37.1), 4326),
+        ST_SetSRID(ST_MakeEnvelope(-120.0, 36.5, -119.5, 37.1), 4326)
+    );
+
+    -- A location that falls inside the polygon above
+    INSERT INTO working.location
+        (location_id, address_1, city, state, zip, country_source_value,
+         latitude, longitude, geom)
+    VALUES
+        (9101, '1248 N Blackstone Ave', 'FRESNO', 'CA', '93703', 'UNITED STATES OF AMERICA',
+         36.75891146, -119.7902719, ST_SetSRID(ST_MakePoint(-119.7902719, 36.75891146), 4326));
+
+    INSERT INTO working.location_history
+        (location_id, relationship_type_concept_id, domain_id, entity_id, start_date, end_date)
+    VALUES
+        (9101, 32848, 1147314, 3763, '2021-01-01', '2023-12-31');
+
+    -- Populate backbone.geom_index/attr_index + working.geom_*/attr_* via the catalog loader
+    v_result := backbone.gdsc_load_variable(jsonb_build_object(
+        'table_id', '_test_svi_catalog',
+        'geom_type', 'Polygon',
+        'table_description', 'Test SVI catalog fixture',
+        'geom_label', 'gid',
+        'variable_id', 'rpl_themes',
+        'description', 'RPL Themes test variable',
+        'concept_id', 12345,
+        'unit', 'index_score',
+        'start_date', '2022-01-01',
+        'end_date', '2022-12-31',
+        'variable_nodata', -999,
+        'source', 'test fixture'
+    ));
+
+    PERFORM _assert('T15.1 gdsc_load_variable created a backbone.geom_index entry',
+        EXISTS (SELECT 1 FROM backbone.geom_index WHERE table_name = '_test_svi_catalog'));
+
+    PERFORM _assert('T15.2 gdsc_load_variable created a backbone.attr_index entry',
+        EXISTS (SELECT 1 FROM backbone.attr_index
+                WHERE table_name = '_test_svi_catalog' AND variable_name = 'rpl_themes'));
+
+    PERFORM _assert('T15.3 working.geom__test_svi_catalog instance table populated',
+        (SELECT COUNT(*) FROM working.geom__test_svi_catalog) = 1);
+
+    PERFORM _assert('T15.4 working.attr__test_svi_catalog instance table populated',
+        (SELECT COUNT(*) FROM working.attr__test_svi_catalog) = 1);
+
+    -- Run the catalog-driven spatial join -- this is the function under test:
+    -- it must resolve the instance tables from attr_index/geom_index itself.
+    v_count := working.spatial_join_from_catalog('rpl_themes', '_test_svi_catalog');
+
+    PERFORM _assert('T15.5 spatial_join_from_catalog matched the fixture location',
+        v_count = 1);
+
+    SELECT * INTO v_row
+    FROM working.external_exposure
+    WHERE location_id = 9101;
+
+    PERFORM _assert('T15.6 external_exposure row created via the catalog-driven join',
+        v_row.location_id = 9101);
+
+    PERFORM _assert('T15.7 value_as_number reflects the working.attr_* instance value',
+        v_row.value_as_number = 0.75);
+
+    PERFORM _assert('T15.8 exposure_source_value is the variable name',
+        v_row.exposure_source_value = 'rpl_themes');
+
+    PERFORM _assert('T15.9 exposure dates reflect attr_index (not the never-populated instance row)',
+        v_row.exposure_start_date = '2022-01-01' AND v_row.exposure_end_date = '2022-12-31');
+END;
+$$;
+
+ROLLBACK TO t15;
 
 
 -- =========================================================================

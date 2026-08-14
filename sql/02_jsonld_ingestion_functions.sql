@@ -127,7 +127,49 @@ DECLARE
     v_attr_concept_id INTEGER;
     v_start_date      DATE;
     v_end_date        DATE;
+    v_dataset_id      TEXT;
+    v_dataset_name    TEXT;
+    v_geom_type       TEXT;
+    v_table_id        TEXT;
+    v_geom_index_id   INTEGER;
 BEGIN
+    -- Resolve table_id / geom_type / dataset_name once, up front, so
+    -- geom_index/attr_index can be registered alongside variable_source.
+    -- table_id follows the same "last URL segment of dataset_id" convention
+    -- retrieve_and_ingest_datasource() uses to derive ETL script paths.
+    SELECT dataset_id, geom_type, dataset_name
+    INTO   v_dataset_id, v_geom_type, v_dataset_name
+    FROM   backbone.data_source
+    WHERE  data_source_uuid = p_data_source_uuid;
+
+    IF v_dataset_id IS NULL THEN
+        RAISE EXCEPTION 'data_source_uuid % not found in backbone.data_source (run ingest_jsonld_metadata first)', p_data_source_uuid;
+    END IF;
+
+    v_table_id := split_part(
+        v_dataset_id, '/',
+        array_length(string_to_array(v_dataset_id, '/'), 1)
+    );
+
+    -- Register a geom_index catalog entry for this table_id if one doesn't
+    -- already exist. This only creates the catalog row -- it does NOT create
+    -- or populate the working.geom_<table_id> instance table, since that
+    -- requires the raw public.<table_id> table (loaded later by the osgeo
+    -- ETL step) to already exist. backbone.gdsc_load_variable() is what
+    -- creates/populates the instance table, using this catalog row.
+    SELECT geom_index_id INTO v_geom_index_id
+    FROM backbone.geom_index
+    WHERE table_name = v_table_id;
+
+    IF NOT FOUND THEN
+        INSERT INTO backbone.geom_index (
+            geom_type_source_value, table_name, table_desc, database_schema
+        ) VALUES (
+            COALESCE(v_geom_type, 'Unknown'), v_table_id, COALESCE(v_dataset_name, v_table_id), 'working'
+        )
+        RETURNING geom_index_id INTO v_geom_index_id;
+    END IF;
+
     FOR v_variable IN SELECT * FROM jsonb_array_elements(jsonld_data->'variableMeasured')
     LOOP
         -- propertyID is typically an array; use ->> to get plain text without JSON quotes
@@ -191,6 +233,47 @@ BEGIN
             min_value            = EXCLUDED.min_value,
             max_value            = EXCLUDED.max_value,
             attr_concept_id      = EXCLUDED.attr_concept_id;
+
+        -- Register an attr_index catalog entry for this variable, if one
+        -- doesn't already exist. Like geom_index above, this only creates
+        -- the catalog row; gdsc_load_variable() still owns loading actual
+        -- values into working.attr_<table_id>. attr_start_date/attr_end_date
+        -- are NOT NULL on attr_index, so a variable whose JSON-LD is missing
+        -- startDate/endDate is skipped here (it's still ingested into
+        -- variable_source above) with a warning, rather than aborting the
+        -- whole batch.
+        IF NOT EXISTS (
+            SELECT 1 FROM backbone.attr_index
+            WHERE table_name = v_table_id AND variable_name = (v_variable->>'name')
+        ) THEN
+            IF v_start_date IS NULL OR v_end_date IS NULL THEN
+                RAISE WARNING 'Skipping attr_index entry for variable "%": missing startDate/endDate in JSON-LD', v_variable->>'name';
+            ELSE
+                INSERT INTO backbone.attr_index (
+                    geom_index_id,
+                    table_name,
+                    variable_name,
+                    variable_desc,
+                    attr_concept_id,
+                    unit_source_value,
+                    attr_start_date,
+                    attr_end_date,
+                    attr_source_value,
+                    database_schema
+                ) VALUES (
+                    v_geom_index_id,
+                    v_table_id,
+                    v_variable->>'name',
+                    COALESCE(v_variable->>'description', v_variable->>'name'),
+                    v_attr_concept_id,
+                    v_variable->>'unitText',
+                    v_start_date,
+                    v_end_date,
+                    v_variable->>'name',
+                    'working'
+                );
+            END IF;
+        END IF;
 
         v_count := v_count + 1;
     END LOOP;
