@@ -1,12 +1,12 @@
 # Continuous integration
 name: CI
 
-# Run in master and dev branches and in all pull requests to those branches
+# Run in main branch only
 on:
   push:
-    branches: [ master ]
+    branches: [ main ]
   pull_request:
-    branches: [ master ]
+    branches: [ main ]
 
 env:
   DOCKER_IMAGE: ohdsi/gaia-db
