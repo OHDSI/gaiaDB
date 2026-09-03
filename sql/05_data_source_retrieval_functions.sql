@@ -1,605 +1,314 @@
--- Data Source Retrieval and Ingestion Functions
--- Functions to download, extract, and ingest external data sources using ogr2ogr
+ -- Data Source Retrieval and Ingestion Functions
+--
+-- backbone.gdsc_exec is defined here because it is only used by this file.
+--
+-- Full ingestion protocol for a dataset living at /data/{table_id}/:
+--
+--   1. backbone.load_datasource_metadata(table_id)
+--        Reads /data/{table_id}/meta_json-ld_{table_id}.json and calls
+--        ingest_jsonld_metadata + ingest_jsonld_variables.
+--
+--   2. backbone.retrieve_and_ingest_datasource(uuid [, script_path [, shell]])
+--        Runs a single ETL shell script for the data source.
+--        Default script path: /data/{table_id}/etl/{table_id}_osgeo
+--        (gdsc_exec appends .sh automatically)
+--
+--   3. backbone.ingest_datasource(table_id)
+--        Full protocol in sequence:
+--          a. load JSON-LD metadata
+--          b. {table_id}_osgeo.sh   — download source data and load via ogr2ogr
+--          c. {table_id}_postgis.sh — fix geometry, add local projection column
+--
+-- Convenience:
+--   backbone.quick_ingest_datasource(dataset_name [, script_path])
+--   backbone.list_downloadable_datasources()
 
--- Enable plsh extension for shell commands (if not already enabled)
--- Note: plsh must be installed in the Docker image
--- CREATE EXTENSION IF NOT EXISTS plsh;
 
--- Function to download and extract files (based on gis_note_misc2.txt)
-CREATE OR REPLACE FUNCTION backbone.fetch_and_extract_file(
-    url TEXT,
-    destination TEXT,
-    compression TEXT DEFAULT NULL,
-    extracted_file TEXT DEFAULT NULL
-)
+-- ---------------------------------------------------------------------------
+-- backbone.gdsc_exec
+-- Execute a shell script via plsh. The script argument must omit the .sh
+-- extension — gdsc_exec appends it before invoking the shell.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION backbone.gdsc_exec(shell TEXT, script TEXT)
 RETURNS TEXT AS $$
 #!/bin/sh
-
-# Create destination directory
-mkdir -p "$(dirname "$2")"
-
-# Download file
-echo "Downloading from $1..."
-curl -s -S -L --connect-timeout 30 --max-time 300 -o "$2" -- "$1"
-
-if [ ! -f "$2" ] || [ ! -s "$2" ]; then
-    echo "Error: Download failed - file not found or empty"
-    exit 1
-fi
-
-echo "Download successful: $2"
-
-# Extract if compression type specified
-if [ -n "$3" ]; then
-    case "$3" in
-        zip)
-            echo "Extracting ZIP archive..."
-            unzip -o "$2" -d "$(dirname "$2")"
-            echo "Extracted to: $(dirname "$2")"
-            ;;
-        tar.gz|tgz)
-            echo "Extracting TAR.GZ archive..."
-            tar -xzf "$2" -C "$(dirname "$2")"
-            echo "Extracted to: $(dirname "$2")"
-            ;;
-        tar)
-            echo "Extracting TAR archive..."
-            tar -xf "$2" -C "$(dirname "$2")"
-            echo "Extracted to: $(dirname "$2")"
-            ;;
-        gz)
-            echo "Extracting GZ file..."
-            gunzip -f "$2"
-            echo "Extracted: $(dirname "$2")/$(basename "$2" .gz)"
-            ;;
-        *)
-            echo "Unknown compression type: $3. No extraction performed."
-            ;;
-    esac
-else
-    echo "No extraction needed."
-fi
-
-echo "Complete: $2"
+$1 $2.sh
+echo "Complete"
 $$ LANGUAGE plsh;
 
--- Function to ingest raw spatial data using ogr2ogr (based on gis_note_misc2.txt line 35)
-CREATE OR REPLACE FUNCTION backbone.ingest_raw_data(
-    file_path TEXT,
-    table_name TEXT,
-    schema_name TEXT DEFAULT 'public',
-    srid INTEGER DEFAULT 4326,
-    geometry_column TEXT DEFAULT 'wgs_geom',
-    geometry_type TEXT DEFAULT NULL,
-    additional_options TEXT DEFAULT NULL
-)
-RETURNS TEXT AS $$
-#!/bin/sh
+COMMENT ON FUNCTION backbone.gdsc_exec(TEXT, TEXT) IS
+    'Run a shell script: gdsc_exec(''/bin/sh'', ''/path/to/script'') executes /path/to/script.sh';
 
-# Build ogr2ogr command
-DB_CONN="dbname=gaiacore user=postgres"
-OPTIONS="-f PostgreSQL"
 
-# Add geometry column name
-OPTIONS="$OPTIONS -lco GEOMETRY_NAME=$5"
-
-# Add FID column
-OPTIONS="$OPTIONS -lco FID=gid"
-
-# Set target SRID
-OPTIONS="$OPTIONS -t_srs EPSG:$4"
-
-# Add geometry type if specified
-if [ -n "$6" ]; then
-    OPTIONS="$OPTIONS -nlt $6"
-fi
-
-# Add schema to table name if specified
-if [ "$3" != "public" ]; then
-    FULL_TABLE="$3.$2"
-else
-    FULL_TABLE="$2"
-fi
-
-# Add any additional options
-if [ -n "$7" ]; then
-    OPTIONS="$OPTIONS $7"
-fi
-
-# Execute ogr2ogr
-echo "Importing $1 into $FULL_TABLE..."
-echo "Command: ogr2ogr $OPTIONS PG:\"$DB_CONN\" \"$1\" -nln $FULL_TABLE"
-
-ogr2ogr $OPTIONS PG:"$DB_CONN" "$1" -nln "$FULL_TABLE"
-
-if [ $? -eq 0 ]; then
-    echo "Successfully imported $1 into $FULL_TABLE"
-else
-    echo "Error: Import failed"
-    exit 1
-fi
-$$ LANGUAGE plsh;
-
--- Function to ingest SQL-based data sources
-CREATE OR REPLACE FUNCTION backbone.ingest_sql_data(
-    file_path TEXT,
-    schema_name TEXT DEFAULT 'public'
-)
-RETURNS TEXT AS $$
-#!/bin/sh
-
-# Check if file is gzip compressed
-if file "$1" | grep -q "gzip compressed"; then
-    echo "File is gzip compressed, decompressing..."
-    # Decompress using zcat (reads gzip regardless of extension)
-    SQL_FILE="${1%.sql}_decompressed.sql"
-    zcat "$1" > "$SQL_FILE"
-    if [ ! -f "$SQL_FILE" ] || [ ! -s "$SQL_FILE" ]; then
-        echo "Error: Decompression failed"
-        exit 1
-    fi
-    echo "Decompressed to: $SQL_FILE"
-else
-    SQL_FILE="$1"
-fi
-
-# Clean the SQL file - remove everything before "-- PostgreSQL database dump"
-CLEANED_FILE="${SQL_FILE%.sql}_cleaned.sql"
-if grep -q "^-- PostgreSQL database dump" "$SQL_FILE"; then
-    echo "Cleaning SQL file - removing header lines..."
-    sed -n '/^-- PostgreSQL database dump/,$p' "$SQL_FILE" > "$CLEANED_FILE"
-    SQL_FILE="$CLEANED_FILE"
-    echo "Cleaned SQL file ready"
-fi
-
-echo "Executing SQL file: $SQL_FILE"
-psql "dbname=gaiacore user=postgres" -f "$SQL_FILE"
-echo "Successfully executed SQL file: $SQL_FILE"
-$$ LANGUAGE plsh;
-
--- Function to process ETL metadata from JSON-LD
-CREATE OR REPLACE FUNCTION backbone.extract_etl_info_from_jsonld(
-    p_data_source_uuid UUID
-)
+-- ---------------------------------------------------------------------------
+-- backbone.load_datasource_metadata
+-- Discovers the JSON-LD file at the standard path and runs both ingest steps.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION backbone.load_datasource_metadata(p_table_id TEXT)
 RETURNS TABLE(
-    download_url TEXT,
-    file_format TEXT,
-    compression_type TEXT,
-    processing_notes TEXT
+    data_source_uuid UUID,
+    dataset_name     TEXT,
+    variables_loaded INTEGER
 ) AS $$
 DECLARE
-    v_wget_action jsonb;
-    v_download_url TEXT;
+    v_path TEXT;
 BEGIN
-    -- Find the 'etl_metadata' array element where potentialAction->name = 'Pseudo Code'
-    SELECT elem INTO v_wget_action
-    FROM backbone.data_source ds,
-         jsonb_array_elements(ds.etl_metadata) elem
-    WHERE ds.data_source_uuid = p_data_source_uuid
-      AND elem->'potentialAction'->>'name' = 'Pseudo Code'
-    LIMIT 1;
+    v_path := format('/data/%s/meta_json-ld_%s.json', p_table_id, p_table_id);
 
-    -- Extract download URL from the wget action result or fall back to distribution
-    SELECT COALESCE(
-        v_wget_action->'potentialAction'->'result'->>'url',
-        v_wget_action->'potentialAction'->'object'->>'url',
-        ds.etl_metadata->'distribution'->>0
-    ) INTO v_download_url
-    FROM backbone.data_source ds
-    WHERE ds.data_source_uuid = p_data_source_uuid;
-
-    -- Return the extracted information
-    RETURN QUERY
-    SELECT
-        v_download_url as download_url,
-        -- Extract file format
-        COALESCE(
-            v_wget_action->'potentialAction'->'result'->>'encodingFormat',
-            'shapefile'
-        ) as file_format,
-        -- Determine compression from URL or format
-        CASE
-            WHEN v_download_url LIKE '%.zip' THEN 'zip'
-            WHEN v_download_url LIKE '%.tar.gz' THEN 'tar.gz'
-            WHEN v_download_url LIKE '%.tgz' THEN 'tar.gz'
-            ELSE NULL
-        END as compression_type,
-        -- Extract processing notes
-        v_wget_action->'potentialAction'->>'description' as processing_notes;
+    RETURN QUERY SELECT * FROM backbone.load_jsonld_from_path(v_path);
 END;
 $$ LANGUAGE plpgsql;
 
--- Main function to retrieve and ingest a data source
+
+-- ---------------------------------------------------------------------------
+-- backbone.retrieve_and_ingest_datasource
+-- Resolves and executes the ETL shell script for a registered data source.
+--
+-- Script path convention (when p_script_path is NULL):
+--   /data/{table_id}/etl/{table_id}_postgis
+-- gdsc_exec appends .sh, so the file on disk is:
+--   /data/{table_id}/etl/{table_id}_postgis.sh
+-- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION backbone.retrieve_and_ingest_datasource(
     p_data_source_uuid UUID,
-    p_download_url TEXT DEFAULT NULL,
-    p_target_schema TEXT DEFAULT 'public',
-    p_target_table TEXT DEFAULT NULL,
-    p_work_directory TEXT DEFAULT '/var/lib/postgresql/data/workdir',
-    p_keep_downloaded BOOLEAN DEFAULT FALSE
+    p_script_path      TEXT DEFAULT NULL,
+    p_shell            TEXT DEFAULT '/bin/sh'
 )
-RETURNS TABLE(
-    step TEXT,
-    status TEXT,
-    message TEXT,
-    details JSONB
-) AS $$
+RETURNS TABLE(step TEXT, status TEXT, message TEXT) AS $$
 DECLARE
     v_dataset_name TEXT;
-    v_dataset_id TEXT;
-    v_download_url TEXT;
-    v_file_format TEXT;
-    v_compression_type TEXT;
-    v_processing_notes TEXT;
-    v_table_name TEXT;
-    v_file_name TEXT;
-    v_download_path TEXT;
-    v_extracted_path TEXT;
-    v_result TEXT;
-    v_geom_type TEXT;
-    v_measurement_technique JSONB;
+    v_dataset_id   TEXT;
+    v_table_id     TEXT;
+    v_script_path  TEXT;
+    v_result       TEXT;
 BEGIN
-    -- Step 1: Get data source metadata
-    RETURN QUERY SELECT 'metadata_retrieval'::TEXT, 'in_progress'::TEXT,
-        'Retrieving data source metadata'::TEXT, NULL::JSONB;
-
-    SELECT
-        ds.dataset_name,
-        ds.dataset_id,
-        ds.geom_type,
-        ds.measurement_technique
-    INTO
-        v_dataset_name,
-        v_dataset_id,
-        v_geom_type,
-        v_measurement_technique
-    FROM backbone.data_source ds
-    WHERE ds.data_source_uuid = p_data_source_uuid;
-
-    IF NOT FOUND THEN
-        RETURN QUERY SELECT 'metadata_retrieval'::TEXT, 'error'::TEXT,
-            format('Data source UUID %s not found', p_data_source_uuid)::TEXT,
-            NULL::JSONB;
-        RETURN;
-    END IF;
-
-    RETURN QUERY SELECT 'metadata_retrieval'::TEXT, 'success'::TEXT,
-        format('Retrieved metadata for: %s', v_dataset_name)::TEXT,
-        jsonb_build_object(
-            'dataset_name', v_dataset_name,
-            'dataset_id', v_dataset_id,
-            'geom_type', v_geom_type
-        );
-
-    -- Step 2: Extract ETL information from JSON-LD
-    RETURN QUERY SELECT 'etl_info_extraction'::TEXT, 'in_progress'::TEXT,
-        'Extracting ETL information from metadata'::TEXT, NULL::JSONB;
-
-    SELECT * INTO v_download_url, v_file_format, v_compression_type, v_processing_notes
-    FROM backbone.extract_etl_info_from_jsonld(p_data_source_uuid);
-
-    -- Override with provided URL if given
-    IF p_download_url IS NOT NULL THEN
-        v_download_url := p_download_url;
-        -- Auto-detect compression from URL
-        IF v_download_url LIKE '%.zip' THEN
-            v_compression_type := 'zip';
-        ELSIF v_download_url LIKE '%.tar.gz' OR v_download_url LIKE '%.tgz' THEN
-            v_compression_type := 'tar.gz';
-        END IF;
-    END IF;
-
-    IF v_download_url IS NULL THEN
-        RETURN QUERY SELECT 'etl_info_extraction'::TEXT, 'error'::TEXT,
-            'No download URL found in metadata or provided as parameter'::TEXT,
-            NULL::JSONB;
-        RETURN;
-    END IF;
-
-    RETURN QUERY SELECT 'etl_info_extraction'::TEXT, 'success'::TEXT,
-        'ETL information extracted'::TEXT,
-        jsonb_build_object(
-            'download_url', v_download_url,
-            'file_format', v_file_format,
-            'compression_type', v_compression_type
-        );
-
-    -- Step 3: Determine table name
-    v_table_name := COALESCE(
-        p_target_table,
-        LOWER(REGEXP_REPLACE(v_dataset_name, '[^a-zA-Z0-9_]', '_', 'g'))
-    );
-
-    -- Step 4: Download and extract file
-    RETURN QUERY SELECT 'download'::TEXT, 'in_progress'::TEXT,
-        format('Downloading from: %s', v_download_url)::TEXT,
-        NULL::JSONB;
-
-    -- Extract filename from URL, handling query parameters
-    v_file_name := split_part(v_download_url, '/', array_length(string_to_array(v_download_url, '/'), 1));
-    v_file_name := split_part(v_file_name, '?', 1); -- Remove query parameters
-
-    -- If filename is empty or just a query string, use dataset name
-    IF v_file_name = '' OR v_file_name IS NULL THEN
-        v_file_name := format('%s.%s',
-            LOWER(REGEXP_REPLACE(v_dataset_name, '[^a-zA-Z0-9_]', '_', 'g')),
-            COALESCE(v_file_format, 'dat')
-        );
-    END IF;
-
-    v_download_path := format('%s/%s', p_work_directory, v_file_name);
-
-    BEGIN
-        RAISE NOTICE 'Starting download from: %', v_download_url;
-        RAISE NOTICE 'Download destination: %', v_download_path;
-
-        v_result := backbone.fetch_and_extract_file(
-            v_download_url,
-            v_download_path,
-            v_compression_type
-        );
-
-        RAISE NOTICE 'Download completed successfully';
-        RAISE NOTICE 'Download result: %', v_result;
-
-        RETURN QUERY SELECT 'download'::TEXT, 'success'::TEXT,
-            v_result::TEXT,
-            jsonb_build_object('download_path', v_download_path);
-
-    EXCEPTION WHEN OTHERS THEN
-        RAISE NOTICE 'Download failed with error: %', SQLERRM;
-        RETURN QUERY SELECT 'download'::TEXT, 'error'::TEXT,
-            format('Download failed: %s', SQLERRM)::TEXT,
-            jsonb_build_object('error', SQLERRM);
-        RETURN;
-    END;
-
-    -- Step 5: Determine extracted file path
-    IF v_compression_type = 'zip' THEN
-        -- For shapefiles in zip, need to find the .shp file
-        v_extracted_path := format('%s/%s.shp',
-            p_work_directory,
-            regexp_replace(v_file_name, '\.zip$', '', 'i')
-        );
-    ELSIF v_compression_type IS NOT NULL THEN
-        v_extracted_path := regexp_replace(v_download_path, '\.(tar\.gz|tgz|gz)$', '', 'i');
-    ELSE
-        v_extracted_path := v_download_path;
-    END IF;
-
-    -- Step 6: Ingest into PostgreSQL using appropriate method
-    RETURN QUERY SELECT 'ingestion'::TEXT, 'in_progress'::TEXT,
-        format('Ingesting into %s.%s using %s method', p_target_schema, v_table_name,
-               CASE WHEN v_file_format = 'sql' THEN 'SQL' ELSE 'ogr2ogr' END)::TEXT,
-        NULL::JSONB;
-
-    BEGIN
-        -- Check if this is a SQL file
-        IF v_file_format = 'sql' OR v_extracted_path LIKE '%.sql' THEN
-            -- Use SQL ingestion method
-            v_result := backbone.ingest_sql_data(
-                v_extracted_path,
-                p_target_schema
-            );
-
-            RETURN QUERY SELECT 'ingestion'::TEXT, 'success'::TEXT,
-                v_result::TEXT,
-                jsonb_build_object(
-                    'schema', p_target_schema,
-                    'method', 'sql',
-                    'message', 'SQL file executed successfully'
-                );
-        ELSE
-            -- Use ogr2ogr for spatial data formats
-            -- Determine geometry type from measurement technique
-            IF v_measurement_technique IS NOT NULL THEN
-                v_geom_type := v_measurement_technique->1->>'termCode';
-                IF v_geom_type = 'multipolygon' THEN
-                    v_geom_type := 'MULTIPOLYGON';
-                ELSIF v_geom_type = 'polygon' THEN
-                    v_geom_type := 'POLYGON';
-                ELSIF v_geom_type = 'point' THEN
-                    v_geom_type := 'POINT';
-                ELSIF v_geom_type = 'line' THEN
-                    v_geom_type := 'LINESTRING';
-                END IF;
-            END IF;
-
-            v_result := backbone.ingest_raw_data(
-                v_extracted_path,
-                v_table_name,
-                p_target_schema,
-                4326, -- SRID
-                'wgs_geom', -- geometry column name
-                v_geom_type -- geometry type
-            );
-
-            RETURN QUERY SELECT 'ingestion'::TEXT, 'success'::TEXT,
-                v_result::TEXT,
-                jsonb_build_object(
-                    'schema', p_target_schema,
-                    'table', v_table_name,
-                    'method', 'ogr2ogr',
-                    'full_name', format('%s.%s', p_target_schema, v_table_name)
-                );
-        END IF;
-
-    EXCEPTION WHEN OTHERS THEN
-        RETURN QUERY SELECT 'ingestion'::TEXT, 'error'::TEXT,
-            format('Ingestion failed: %s', SQLERRM)::TEXT,
-            jsonb_build_object('error', SQLERRM);
-        RETURN;
-    END;
-
-    -- Step 7: Create spatial index (only for non-SQL data sources)
-    IF v_file_format != 'sql' AND v_extracted_path NOT LIKE '%.sql' THEN
-        RETURN QUERY SELECT 'indexing'::TEXT, 'in_progress'::TEXT,
-            'Creating spatial index'::TEXT,
-            NULL::JSONB;
-
-        BEGIN
-            EXECUTE format(
-                'CREATE INDEX IF NOT EXISTS idx_%I_wgs_geom ON %I.%I USING GIST(wgs_geom)',
-                v_table_name,
-                p_target_schema,
-                v_table_name
-            );
-
-            RETURN QUERY SELECT 'indexing'::TEXT, 'success'::TEXT,
-                format('Created spatial index on %s.%s', p_target_schema, v_table_name)::TEXT,
-                NULL::JSONB;
-
-        EXCEPTION WHEN OTHERS THEN
-            RETURN QUERY SELECT 'indexing'::TEXT, 'warning'::TEXT,
-                format('Could not create index: %s', SQLERRM)::TEXT,
-                jsonb_build_object('error', SQLERRM);
-        END;
-    ELSE
-        RETURN QUERY SELECT 'indexing'::TEXT, 'skipped'::TEXT,
-            'Skipping spatial index for SQL data source'::TEXT,
-            NULL::JSONB;
-    END IF;
-
-    -- Step 8: Cleanup downloaded files (if requested)
-    IF NOT p_keep_downloaded THEN
-        RETURN QUERY SELECT 'cleanup'::TEXT, 'in_progress'::TEXT,
-            'Removing downloaded files'::TEXT,
-            NULL::JSONB;
-
-        -- Note: File cleanup would require additional plsh function
-        -- For now, just report what should be cleaned
-        RETURN QUERY SELECT 'cleanup'::TEXT, 'info'::TEXT,
-            format('Downloaded files at: %s', v_download_path)::TEXT,
-            jsonb_build_object(
-                'download_path', v_download_path,
-                'note', 'Manual cleanup may be required'
-            );
-    END IF;
-
-    -- Step 9: Update data source metadata with table location
-    UPDATE backbone.data_source
-    SET etl_metadata = COALESCE(etl_metadata, '{}'::jsonb) ||
-        jsonb_build_object(
-            'ingested_table', jsonb_build_object(
-                'schema', p_target_schema,
-                'table', v_table_name,
-                'ingested_at', NOW()
-            )
-        )
-    WHERE data_source_uuid = p_data_source_uuid;
-
-    RETURN QUERY SELECT 'complete'::TEXT, 'success'::TEXT,
-        format('Data source successfully ingested into %s.%s', p_target_schema, v_table_name)::TEXT,
-        jsonb_build_object(
-            'schema', p_target_schema,
-            'table', v_table_name,
-            'dataset_name', v_dataset_name
-        );
-
-END;
-$$ LANGUAGE plpgsql;
-
--- Simplified wrapper function for quick ingestion
-CREATE OR REPLACE FUNCTION backbone.quick_ingest_datasource(
-    p_dataset_name TEXT,
-    p_download_url TEXT DEFAULT NULL
-)
-RETURNS TABLE(
-    step TEXT,
-    status TEXT,
-    message TEXT
-) AS $$
-DECLARE
-    v_data_source_uuid UUID;
-BEGIN
-    -- Find data source by name
-    SELECT data_source_uuid INTO v_data_source_uuid
-    FROM backbone.data_source
-    WHERE dataset_name ILIKE '%' || p_dataset_name || '%'
-    LIMIT 1;
+    SELECT dataset_name, dataset_id
+    INTO   v_dataset_name, v_dataset_id
+    FROM   backbone.data_source
+    WHERE  data_source_uuid = p_data_source_uuid;
 
     IF NOT FOUND THEN
         RETURN QUERY SELECT 'error'::TEXT, 'error'::TEXT,
-            format('Data source matching "%s" not found', p_dataset_name)::TEXT;
+            format('Data source UUID %s not found', p_data_source_uuid)::TEXT;
         RETURN;
     END IF;
 
-    -- Call main function
-    RETURN QUERY
-    SELECT r.step, r.status, r.message
-    FROM backbone.retrieve_and_ingest_datasource(
-        v_data_source_uuid,
-        p_download_url
-    ) r;
+    RETURN QUERY SELECT 'metadata'::TEXT, 'success'::TEXT,
+        format('Found data source: %s', v_dataset_name)::TEXT;
+
+    IF p_script_path IS NOT NULL THEN
+        v_script_path := p_script_path;
+    ELSE
+        -- Derive table_id from the last URL segment of dataset_id
+        v_table_id := split_part(
+            v_dataset_id, '/',
+            array_length(string_to_array(v_dataset_id, '/'), 1)
+        );
+        -- Default to osgeo script (download + ogr2ogr load); .sh appended by gdsc_exec
+        v_script_path := format('/data/%s/etl/%s_osgeo', v_table_id, v_table_id);
+    END IF;
+
+    RETURN QUERY SELECT 'ingestion'::TEXT, 'in_progress'::TEXT,
+        format('Running: %s.sh', v_script_path)::TEXT;
+
+    BEGIN
+        v_result := backbone.gdsc_exec(p_shell, v_script_path);
+    EXCEPTION WHEN OTHERS THEN
+        -- Do not swallow SQLSTATE XX000: plsh raises it both for a script's
+        -- non-empty stderr (harmless warnings included) and for a genuinely
+        -- failed/killed run, and the two are indistinguishable from SQLSTATE
+        -- alone. Silently treating XX000 as non-fatal here previously let a
+        -- failed ETL script report status='success', so ingest_datasource
+        -- would proceed into the postgis step against a table that was
+        -- never created. ETL scripts should redirect noisy subprocess
+        -- stderr (e.g. ogr2ogr) to a log file instead of leaving it on
+        -- plsh's captured pipe -- see extras/*/etl/*_osgeo.sh.
+        RETURN QUERY SELECT 'ingestion'::TEXT, 'error'::TEXT,
+            format('Script failed: %s', SQLERRM)::TEXT;
+        RETURN;
+    END;
+
+    RETURN QUERY SELECT 'ingestion'::TEXT, 'success'::TEXT, v_result::TEXT;
+
+    UPDATE backbone.data_source
+    SET etl_metadata = COALESCE(etl_metadata, '[]'::jsonb) ||
+        jsonb_build_array(jsonb_build_object(
+            'ingested_at',  NOW(),
+            'script_path',  v_script_path || '.sh'
+        ))
+    WHERE data_source_uuid = p_data_source_uuid;
+
+    RETURN QUERY SELECT 'complete'::TEXT, 'success'::TEXT,
+        format('ETL complete for %s', v_dataset_name)::TEXT;
 END;
 $$ LANGUAGE plpgsql;
 
--- Function to list downloadable data sources
+
+-- ---------------------------------------------------------------------------
+-- backbone.ingest_datasource
+-- Full three-step protocol:
+--   1. Load JSON-LD metadata (ingest_jsonld_metadata + ingest_jsonld_variables)
+--   2. Run {table_id}_osgeo.sh   — download source file and load via ogr2ogr
+--   3. Run {table_id}_postgis.sh — clean geometry and add local projection column
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION backbone.ingest_datasource(
+    p_table_id TEXT,
+    p_shell    TEXT DEFAULT '/bin/sh'
+)
+RETURNS TABLE(step TEXT, status TEXT, message TEXT) AS $$
+DECLARE
+    v_data_source_uuid UUID;
+    v_dataset_name     TEXT;
+    v_variables_loaded INTEGER;
+    v_osgeo_script     TEXT;
+    v_postgis_script   TEXT;
+    v_osgeo_ok         BOOLEAN := TRUE;
+    v_step             TEXT;
+    v_status           TEXT;
+    v_message          TEXT;
+BEGIN
+    v_osgeo_script   := format('/data/%s/etl/%s_osgeo',   p_table_id, p_table_id);
+    v_postgis_script := format('/data/%s/etl/%s_postgis', p_table_id, p_table_id);
+
+    -- Step 1: load JSON-LD metadata
+    step    := 'metadata_load'; status := 'in_progress';
+    message := format('Loading /data/%s/meta_json-ld_%s.json', p_table_id, p_table_id);
+    RETURN NEXT;
+
+    BEGIN
+        SELECT r.data_source_uuid, r.dataset_name, r.variables_loaded
+        INTO   v_data_source_uuid, v_dataset_name, v_variables_loaded
+        FROM   backbone.load_datasource_metadata(p_table_id) r;
+    EXCEPTION WHEN OTHERS THEN
+        step := 'metadata_load'; status := 'error';
+        message := format('Metadata load failed: %s', SQLERRM);
+        RETURN NEXT;
+        RETURN;
+    END;
+
+    step    := 'metadata_load'; status := 'success';
+    message := format('Loaded "%s" with %s variables', v_dataset_name, v_variables_loaded);
+    RETURN NEXT;
+
+    -- Step 2: osgeo — download source data and load into PostGIS via ogr2ogr.
+    -- Stream each row from retrieve_and_ingest_datasource, tracking any error in one pass.
+    FOR v_step, v_status, v_message IN
+        SELECT r.step, r.status, r.message
+        FROM   backbone.retrieve_and_ingest_datasource(v_data_source_uuid, v_osgeo_script, p_shell) r
+    LOOP
+        step := v_step; status := v_status; message := v_message;
+        RETURN NEXT;
+        IF v_status = 'error' THEN v_osgeo_ok := FALSE; END IF;
+    END LOOP;
+
+    IF NOT v_osgeo_ok THEN
+        step    := 'postgis'; status := 'skipped';
+        message := 'Skipping postgis step — osgeo step reported an error';
+        RETURN NEXT;
+        RETURN;
+    END IF;
+
+    -- Step 3: postgis — clean geometry, add local projection column
+    step := 'postgis'; status := 'in_progress';
+    message := format('Running: %s.sh', v_postgis_script);
+    RETURN NEXT;
+
+    BEGIN
+        PERFORM backbone.gdsc_exec(p_shell, v_postgis_script);
+    EXCEPTION WHEN OTHERS THEN
+        step := 'postgis'; status := 'error';
+        message := format('postgis script failed: %s', SQLERRM);
+        RETURN NEXT;
+        RETURN;
+    END;
+
+    step    := 'postgis'; status := 'success';
+    message := format('Geometry updated for %s', v_dataset_name);
+    RETURN NEXT;
+
+    step    := 'complete'; status := 'success';
+    message := format('Ingestion complete for %s', v_dataset_name);
+    RETURN NEXT;
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- ---------------------------------------------------------------------------
+-- backbone.quick_ingest_datasource
+-- Look up UUID by dataset name, then run its ETL script (no metadata reload).
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION backbone.quick_ingest_datasource(
+    p_dataset_name TEXT,
+    p_script_path  TEXT DEFAULT NULL
+)
+RETURNS TABLE(step TEXT, status TEXT, message TEXT) AS $$
+DECLARE
+    v_data_source_uuid UUID;
+BEGIN
+    SELECT data_source_uuid INTO v_data_source_uuid
+    FROM   backbone.data_source
+    WHERE  dataset_name ILIKE '%' || p_dataset_name || '%'
+    LIMIT  1;
+
+    IF NOT FOUND THEN
+        RETURN QUERY SELECT 'error'::TEXT, 'error'::TEXT,
+            format('No data source matching "%s"', p_dataset_name)::TEXT;
+        RETURN;
+    END IF;
+
+    RETURN QUERY
+    SELECT r.step, r.status, r.message
+    FROM   backbone.retrieve_and_ingest_datasource(v_data_source_uuid, p_script_path) r;
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- ---------------------------------------------------------------------------
+-- backbone.list_downloadable_datasources
+-- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION backbone.list_downloadable_datasources()
 RETURNS TABLE(
     data_source_uuid UUID,
-    dataset_name TEXT,
-    has_download_url BOOLEAN,
-    download_url TEXT,
-    file_format TEXT,
+    dataset_name     TEXT,
+    table_id         TEXT,
+    geom_type        TEXT,
+    srid             INTEGER,
+    etl_script       TEXT,
     already_ingested BOOLEAN,
-    ingested_table TEXT
+    last_ingested_at TIMESTAMPTZ
 ) AS $$
 BEGIN
     RETURN QUERY
     SELECT
         ds.data_source_uuid,
         ds.dataset_name,
-        -- Check if wget action with URL exists
+        split_part(ds.dataset_id, '/',
+            array_length(string_to_array(ds.dataset_id, '/'), 1)
+        ) AS table_id,
+        ds.geom_type,
+        ds.srid,
+        format('/data/%s/etl/%s_postgis.sh',
+            split_part(ds.dataset_id, '/', array_length(string_to_array(ds.dataset_id, '/'), 1)),
+            split_part(ds.dataset_id, '/', array_length(string_to_array(ds.dataset_id, '/'), 1))
+        ) AS etl_script,
         (
-            SELECT COALESCE(
-                elem->'potentialAction'->'result'->>'url',
-                elem->'potentialAction'->'object'->>'url'
-            ) IS NOT NULL
-            FROM jsonb_array_elements(ds.etl_metadata) elem
-            WHERE elem->'potentialAction'->>'name' = 'wget'
-            LIMIT 1
-        ) as has_download_url,
-        -- Extract download URL from wget action or fall back to distribution
-        COALESCE(
-            (
-                SELECT COALESCE(
-                    elem->'potentialAction'->'result'->>'url',
-                    elem->'potentialAction'->'object'->>'url'
-                )
-                FROM jsonb_array_elements(ds.etl_metadata) elem
-                WHERE elem->'potentialAction'->>'name' = 'wget'
-                LIMIT 1
-            ),
-            ds.etl_metadata->'distribution'->>0
-        ) as download_url,
-        -- Extract file format from wget action
-        COALESCE(
-            (
-                SELECT elem->'potentialAction'->'result'->>'encodingFormat'
-                FROM jsonb_array_elements(ds.etl_metadata) elem
-                WHERE elem->'potentialAction'->>'name' = 'wget'
-                LIMIT 1
-            ),
-            'unknown'
-        ) as file_format,
-        (ds.etl_metadata->'ingested_table') IS NOT NULL as already_ingested,
-        COALESCE(
-            format('%s.%s',
-                ds.etl_metadata->'ingested_table'->>'schema',
-                ds.etl_metadata->'ingested_table'->>'table'
-            ),
-            NULL
-        ) as ingested_table
+            SELECT COUNT(*) > 0
+            FROM   jsonb_array_elements(COALESCE(ds.etl_metadata, '[]'::jsonb)) elem
+            WHERE  elem ? 'ingested_at'
+        ) AS already_ingested,
+        (
+            SELECT MAX((elem->>'ingested_at')::TIMESTAMPTZ)
+            FROM   jsonb_array_elements(COALESCE(ds.etl_metadata, '[]'::jsonb)) elem
+            WHERE  elem ? 'ingested_at'
+        ) AS last_ingested_at
     FROM backbone.data_source ds
     ORDER BY ds.dataset_name;
 END;
 $$ LANGUAGE plpgsql;
 
-COMMENT ON FUNCTION backbone.fetch_and_extract_file IS 'Download and optionally extract compressed files from URL';
-COMMENT ON FUNCTION backbone.ingest_raw_data IS 'Ingest spatial data using ogr2ogr (based on gis_note_misc2.txt line 35)';
-COMMENT ON FUNCTION backbone.ingest_sql_data IS 'Ingest SQL-based data sources by executing SQL file';
-COMMENT ON FUNCTION backbone.extract_etl_info_from_jsonld IS 'Extract ETL information from JSON-LD metadata by searching for wget action';
-COMMENT ON FUNCTION backbone.retrieve_and_ingest_datasource IS 'Main function to download, extract, and ingest a data source (supports both spatial and SQL formats)';
-COMMENT ON FUNCTION backbone.quick_ingest_datasource IS 'Simplified wrapper to ingest a data source by name';
-COMMENT ON FUNCTION backbone.list_downloadable_datasources IS 'List all data sources with download information';
+
+COMMENT ON FUNCTION backbone.load_datasource_metadata     IS 'Load JSON-LD from /data/{table_id}/meta_json-ld_{table_id}.json into backbone tables.';
+COMMENT ON FUNCTION backbone.retrieve_and_ingest_datasource IS 'Run the ETL script for a registered data source. Default: /data/{table_id}/etl/{table_id}_postgis.sh';
+COMMENT ON FUNCTION backbone.ingest_datasource            IS 'Full protocol: (1) load JSON-LD metadata, (2) run _osgeo.sh to download + ogr2ogr load, (3) run _postgis.sh to clean geometry and add local projection.';
+COMMENT ON FUNCTION backbone.quick_ingest_datasource      IS 'Look up a data source by name and run its ETL script.';
+COMMENT ON FUNCTION backbone.list_downloadable_datasources IS 'List all data sources with ETL script paths and ingestion status.';

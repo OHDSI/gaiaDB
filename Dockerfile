@@ -29,22 +29,36 @@ RUN cd /tmp && \
     cd / && \
     rm -rf /tmp/plsh
 
-# Create directory
-RUN mkdir -p /csv /sql
+# Create required directories
+# TODO: we may want to better locate these
+RUN mkdir -p /csv /sql /data /extras /run
+RUN chown 70:70 /csv /sql /data /extras /run
 
-# Download vocabulary CSV files from CVB repository
-RUN wget -O /csv/gis_vocabulary_fragment.csv https://raw.githubusercontent.com/TuftsCTSI/CVB/refs/heads/main/GIS/Ontology/vocabulary_delta.csv
-RUN wget -O /csv/gis_concept_class_fragment.csv https://raw.githubusercontent.com/TuftsCTSI/CVB/refs/heads/main/GIS/Ontology/concept_class_delta.csv
-RUN wget -O /csv/gis_domain_fragment.csv https://raw.githubusercontent.com/TuftsCTSI/CVB/refs/heads/main/GIS/Ontology/domain_delta.csv
-RUN wget -O /csv/gis_concept_fragment.csv https://raw.githubusercontent.com/TuftsCTSI/CVB/refs/heads/main/GIS/Ontology/concept_delta.csv
-RUN wget -O /csv/gis_relationship_fragment.csv https://raw.githubusercontent.com/TuftsCTSI/CVB/refs/heads/main/GIS/Ontology/relationship_delta.csv
-RUN wget -O /csv/gis_concept_relationship_fragment.csv https://raw.githubusercontent.com/TuftsCTSI/CVB/refs/heads/main/GIS/Ontology/concept_relationship_delta.csv
+USER postgres
+
+# Runtime defaults — override with -e at docker run or in docker-compose
+ENV INIT_WITH_CATALOG=TRUE
+ENV INIT_WITH_DATASOURCE_MOUNT=FALSE
+
+## Download vocabulary CSV files from CVB repository
+#RUN wget -O /csv/gis_vocabulary_fragment.csv https://raw.githubusercontent.com/TuftsCTSI/CVB/refs/heads/main/GIS/Ontology/vocabulary_delta.csv
+#RUN wget -O /csv/gis_concept_class_fragment.csv https://raw.githubusercontent.com/TuftsCTSI/CVB/refs/heads/main/GIS/Ontology/concept_class_delta.csv
+#RUN wget -O /csv/gis_domain_fragment.csv https://raw.githubusercontent.com/TuftsCTSI/CVB/refs/heads/main/GIS/Ontology/domain_delta.csv
+#RUN wget -O /csv/gis_concept_fragment.csv https://raw.githubusercontent.com/TuftsCTSI/CVB/refs/heads/main/GIS/Ontology/concept_delta.csv
+#RUN wget -O /csv/gis_relationship_fragment.csv https://raw.githubusercontent.com/TuftsCTSI/CVB/refs/heads/main/GIS/Ontology/relationship_delta.csv
+#RUN wget -O /csv/gis_concept_relationship_fragment.csv https://raw.githubusercontent.com/TuftsCTSI/CVB/refs/heads/main/GIS/Ontology/concept_relationship_delta.csv
 
 # Copy SQL db function files
 COPY sql/*.sql /sql/
 
-# Copy db initialization scripts
-COPY init/*.* /docker-entrypoint-initdb.d/
+# Copy db initialization scripts (shell + schema init)
+COPY init/00_init_gaiaDB.sh /docker-entrypoint-initdb.d/
+COPY sql/01_init_schema.sql /docker-entrypoint-initdb.d/
+
+# Bundle example sources (used when INIT_WITH_CATALOG=FALSE)
+COPY extras/ /extras/
+
+COPY tests/ /tests/
 
 # copy entrypoint script
 COPY --chmod=0755 docker-gaiadb-entrypoint.sh /usr/local/bin/
