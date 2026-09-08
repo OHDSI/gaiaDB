@@ -36,19 +36,13 @@ fi
 # ---------------------------------------------------------------------------
 # Postgres authentication
 # ---------------------------------------------------------------------------
-# if from docker-compose 
+
+# $POSTGRES_PASSWORD: check if emtpy variable exists from docker-compose 
 if [ -z "${POSTGRES_PASSWORD}" ]; then
     export POSTGRES_PASSWORD=$(cat $POSTGRES_PASSWORD_FILE)
     unset POSTGRES_PASSWORD_FILE
+    echo [gaiaDB] set postgres password
 fi
-
-# if from docker-compose
-if [ -z "${DB_AUTHENTICATOR_PASSWORD}" ]; then 
-    export DB_AUTHENTICATOR_PASSWORD=$(cat $AUTHENTICATOR_PASSWORD_FILE)
-    unset AUTHENTICATOR_PASSWORD_FILE
-fi
-
-# TODO handle all API keys, perhaps from abstracted list somewhere ...
 
 # ETL scripts (run in-container via plsh/gdsc_exec) always connect to this
 # same container's own Postgres, never to a separate "gaia-db" host -- so the
@@ -66,4 +60,4 @@ echo "[gaiaDB] postgres authentication set"
 
 
 # Hand off to the official PostgreSQL entrypoint
-exec bash /usr/local/bin/docker-entrypoint.sh postgres
+exec /usr/local/bin/docker-entrypoint.sh "$@"

@@ -1,4 +1,4 @@
-FROM postgis/postgis:16-3.4-alpine
+FROM postgis/postgis:16-3.5-alpine
 
 # Install required packages for gaiaCore functionality
 # TODO check what is still needed - some of this looks redundant
@@ -17,8 +17,8 @@ RUN apk add --no-cache \
     bc \
     make \
     g++ \
-    clang15 \
-    llvm15
+    clang21 \
+    llvm21
 
 # Install plsh (PostgreSQL shell procedural language)
 RUN cd /tmp && \
