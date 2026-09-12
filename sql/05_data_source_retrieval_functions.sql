@@ -35,8 +35,7 @@ RETURNS TEXT AS $$
 export POSTGRES_USER=$PGUSER
 export POSTGRES_DB=$PGDATABASE
 export POSTGRES_PORT=$PGPORT
-$1 $2.sh
-echo "Complete"
+$1 $2.sh 2>&1
 $$ LANGUAGE plsh;
 
 COMMENT ON FUNCTION backbone.gdsc_exec(TEXT, TEXT) IS
