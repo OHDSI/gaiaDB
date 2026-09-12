@@ -12,6 +12,7 @@ RUN apk add --no-cache \
     wget \
     ca-certificates \
     git \
+    p7zip \
     build-base \
     postgresql-dev \
     bc \
