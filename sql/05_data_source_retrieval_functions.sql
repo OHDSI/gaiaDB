@@ -32,8 +32,10 @@
 CREATE OR REPLACE FUNCTION backbone.gdsc_exec(shell TEXT, script TEXT)
 RETURNS TEXT AS $$
 #!/bin/sh
-$1 $2.sh
-echo "Complete"
+export POSTGRES_USER=$PGUSER
+export POSTGRES_DB=$PGDATABASE
+export POSTGRES_PORT=$PGPORT
+$1 $2.sh 2>&1
 $$ LANGUAGE plsh;
 
 COMMENT ON FUNCTION backbone.gdsc_exec(TEXT, TEXT) IS

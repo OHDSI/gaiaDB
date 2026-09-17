@@ -97,7 +97,7 @@ echo $dpath
 deps=$(cat $dpath/meta_etl_$1.json | grep dependency)
 if [[ ${#deps} -gt 0 ]]
 then
-  echo $deps | grep -o '\[[^][]*]' | sed 's/^.//;s/.$//' | awk -F',' '{for(i=1;i<=NF;i++) print $i}'
+  echo $deps | grep -o '\[[^][]*]' | sed 's/^.//;s/.$//' | tr -d '"' | tr -d ' ' | awk -F',' '{for(i=1;i<=NF;i++) print $i}'
 fi
 
 $BODY$;
@@ -130,6 +130,7 @@ AS $BODY$
 DECLARE
 	geom_entry_exists    boolean;
 	attr_entry_exists    boolean;
+	attr_data_type       text;
 	geom_table_exists    boolean;
 	geom_table_populated boolean;
 	attr_table_exists    boolean;
@@ -142,6 +143,7 @@ DECLARE
 	attr_seq_name        text;
 	geom_instance        varchar := 'None';
 	attr_instance        varchar := 'None';
+	time_period          RECORD;
 
 BEGIN
 
@@ -150,9 +152,36 @@ BEGIN
 	-- TODO: geom type and conceptID??
 	-- TODO: put this function in backbone and adjust
 
-	geom_table_name := 'geom_' || (params->>'table_id')::text;
-	attr_table_name := 'attr_' || (params->>'table_id')::text;
+	geom_table_name := 'geom_' || (params->>'table_id');
+	attr_table_name := 'attr_' || (params->>'table_id');
 	attr_seq_name   := attr_table_name || '_attr_record_id_seq';
+
+	-- get the data type for the attribute column
+	SELECT udt_name
+	INTO   attr_data_type
+	FROM information_schema.columns
+	WHERE table_schema = 'public'
+	AND table_name = (params->>'table_id')
+	AND column_name =  (params->>'variable_id');
+
+	-- if attribute is jsonb time series get the date_keys
+	IF attr_data_type = 'jsonb' THEN
+		DROP TABLE IF EXISTS jsonb_date_keys;
+		EXECUTE format(
+			'CREATE TEMPORARY TABLE jsonb_date_keys AS
+			WITH date_keys AS (
+				SELECT DISTINCT jsonb_object_keys(%I) AS keys
+				FROM public.%I
+			)
+			SELECT
+				keys AS date_key,
+				split_part(keys, ''/'', 1) as start_date,
+				split_part(keys, ''/'', 2) as end_date
+			FROM date_keys',
+			(params->>'variable_id'),
+			(params->>'table_id')
+		);
+	END IF;
 
 	-- get the primary key for the table
 	RAISE NOTICE 'getting pk for table: %', params->>'table_id';
@@ -163,7 +192,7 @@ BEGIN
 	JOIN pg_catalog.pg_namespace nsp ON nsp.oid = con.connamespace
 	JOIN pg_catalog.pg_attribute att ON att.attrelid = con.conrelid AND att.attnum = ANY(con.conkey)
 	WHERE con.contype = 'p'
-	  AND rel.relname = (params->>'table_id')::text
+	  AND rel.relname = (params->>'table_id')
 	  AND nsp.nspname = 'public';
 	RAISE NOTICE 'PK for table: %', table_pk;
 
@@ -181,16 +210,16 @@ BEGIN
 		INSERT INTO backbone.geom_index (
 			geom_type_source_value, table_name, table_desc, database_schema
 		) VALUES (
-			(params->>'geom_type')::text,
-			(params->>'table_id')::text,
-			(params->>'table_description')::text,
+			(params->>'geom_type'),
+			(params->>'table_id'),
+			(params->>'table_description'),
 			'working'
 		);
 	END IF;
 
 	SELECT geom_index_id INTO geom_id
 	FROM backbone.geom_index
-	WHERE table_name = (params->>'table_id')::text;
+	WHERE table_name = (params->>'table_id');
 
 	geom_instance := geom_table_name;
 
@@ -225,8 +254,8 @@ BEGIN
 			 SELECT %I, %L, %I, ST_Transform(geom, 4326), ST_SRID(geom_local), geom_local
 			 FROM public.%I',
 			geom_table_name,
-			table_pk, geom_id, (params->>'geom_label')::text,
-			(params->>'table_id')::text
+			table_pk, geom_id, (params->>'geom_label'),
+			(params->>'table_id')
 		);
 	END IF;
 
@@ -235,8 +264,8 @@ BEGIN
 	-- =================================================================
 	SELECT EXISTS (
 		SELECT 1 FROM backbone.attr_index
-		WHERE variable_name = (params->>'variable_id')::text
-		  AND table_name = (params->>'table_id')::text
+		WHERE variable_name = (params->>'variable_id')
+		  AND table_name = (params->>'table_id')
 	) INTO attr_entry_exists;
 
 	IF NOT attr_entry_exists THEN
@@ -249,27 +278,28 @@ BEGIN
 			attr_source_value, database_schema
 		) VALUES (
 			geom_id,
-			(params->>'table_id')::text,
-			(params->>'variable_id')::text,
-			(params->>'description')::text,
-			NULLIF((params->>'concept_id')::int, NULL)::int,
-			NULLIF((params->>'concept_id')::int, NULL)::int,
-			(params->>'unit')::text,
-			(params->>'start_date')::date,
-			(params->>'end_date')::date,
-			(params->>'variable_nodata')::numeric,
-			(params->>'variable_nodata')::text,
-			(params->>'source')::text,
+			(params->>'table_id'),
+			(params->>'variable_id'),
+			NULLIF((params->>'description'), ''),
+			NULLIF((params->>'concept_id'), '')::int,
+			NULLIF((params->>'unit_concept_id'), '')::int,
+			NULLIF((params->>'unit'), ''),
+			NULLIF((params->>'start_date'), '')::date,
+			NULLIF((params->>'end_date'), '')::date,
+			NULLIF((params->>'variable_nodata'), '')::numeric,
+			NULLIF((params->>'variable_nodata'), ''),
+			(params->>'source'),
 			'working'
 		);
 	END IF;
 
 	SELECT attr_index_id INTO attr_id
 	FROM backbone.attr_index
-	WHERE variable_name = (params->>'variable_id')::text
-	  AND table_name = (params->>'table_id')::text;
+	WHERE variable_name = (params->>'variable_id')
+	  AND table_name = (params->>'table_id');
 
 	attr_instance := attr_table_name;
+	RAISE NOTICE 'creating attr table % with attr_id %', attr_instance, attr_id;
 
 	-- =================================================================
 	-- working.attr_<table_id> instance table -- shared across every
@@ -302,14 +332,51 @@ BEGIN
 		INTO attr_rows_loaded;
 
 	IF NOT attr_rows_loaded THEN
-		EXECUTE format(
-			'INSERT INTO working.%I (attr_index_id, geom_record_id, value_as_number, value_as_string)
-			 SELECT %L, %I, %I, TO_CHAR(%I, ''99999999990.99'')
-			 FROM public.%I',
-			attr_table_name,
-			attr_id, table_pk, (params->>'variable_id')::text, (params->>'variable_id')::text,
-			(params->>'table_id')::text
-		);
+		IF attr_data_type != 'jsonb' THEN
+			EXECUTE format(
+				'INSERT INTO working.%I (attr_index_id, geom_record_id, attr_concept_id, attr_start_date, attr_end_date, value_as_number, value_as_string, unit_concept_id, unit_source_value)
+				 SELECT %L, %I, %L, %L, %L, %I, TO_CHAR(%I, ''99999999990.99''), %L, %L
+				 FROM public.%I
+				 WHERE %I IS NOT NULL',
+				attr_table_name,
+				attr_id,
+				table_pk,
+				NULLIF((params->>'concept_id'), '')::int,
+				NULLIF((params->>'start_date'), '')::date,
+				NULLIF((params->>'end_date'), '')::date,
+				(params->>'variable_id'),
+				(params->>'variable_id'),
+				NULLIF((params->>'unit_concept_id'), '')::int,
+				NULLIF((params->>'unit'), ''),
+				(params->>'table_id'),
+				(params->>'variable_id')
+			);
+		ELSE
+			FOR time_period IN
+				SELECT * FROM jsonb_date_keys
+			LOOP
+				EXECUTE format(
+					'INSERT INTO working.%I (attr_index_id, geom_record_id, attr_concept_id, attr_start_date, attr_end_date, value_as_number, value_as_string, unit_concept_id, unit_source_value)
+					 SELECT %L, %I, %L, %L, %L, (%I ->> %L)::numeric, TO_CHAR((%I ->> %L)::numeric, ''99999999990.99''), %L, %L
+					 FROM public.%I
+					 WHERE %I IS NOT NULL',
+					attr_table_name,
+					attr_id,
+					table_pk,
+					NULLIF((params->>'concept_id'), '')::int,
+					time_period.start_date,
+					time_period.end_date,
+					(params->>'variable_id'),
+					(time_period.date_key),
+					(params->>'variable_id'),
+					(time_period.date_key),
+					NULLIF((params->>'unit_concept_id'), '')::int,
+					NULLIF((params->>'unit'), ''),
+					(params->>'table_id'),
+					(params->>'variable_id')
+				);
+			END LOOP;
+		END IF;
 	END IF;
 
 	RETURN '{"geom": "' || geom_instance || '","attr": "' || attr_instance || '"}';
