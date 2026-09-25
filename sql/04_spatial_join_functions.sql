@@ -342,10 +342,10 @@ BEGIN
                 ELSE 0
             END AS person_id,
             COALESCE(%1$L::integer, 0) AS exposure_concept_id,
-            GREATEST(%2$L::date, gol.start_date) AS exposure_start_date,
-            GREATEST(%2$L::timestamp, gol.start_date::timestamp) AS exposure_start_datetime,
-            LEAST(%3$L::date, gol.end_date) AS exposure_end_date,
-            LEAST(%3$L::timestamp, gol.end_date::timestamp) AS exposure_end_datetime,
+            GREATEST(att_dates.attr_start_date, gol.start_date) AS exposure_start_date,
+            GREATEST(att_dates.attr_start_date::timestamp, gol.start_date::timestamp) AS exposure_start_datetime,
+            LEAST(att_dates.attr_end_date, gol.end_date) AS exposure_end_date,
+            LEAST(att_dates.attr_end_date::timestamp, gol.end_date::timestamp) AS exposure_end_datetime,
             0 AS exposure_type_concept_id,
             0 AS exposure_relationship_concept_id,
             %4$L::integer AS exposure_source_concept_id,
@@ -360,6 +360,14 @@ BEGIN
             %12$L::integer AS unit_concept_id
         FROM %6$I.%7$I att
         JOIN %8$I.%9$I geo ON att.geom_record_id = geo.geom_record_id
+        -- Each attr row carries its own time window (e.g. one month of a
+        -- 2014-2019 series); attr_index only holds the variable's overall
+        -- span, so use it only as a fallback for rows loaded without dates.
+        CROSS JOIN LATERAL (
+            SELECT
+                COALESCE(att.attr_start_date, %2$L::date) AS attr_start_date,
+                COALESCE(att.attr_end_date, %3$L::date) AS attr_end_date
+        ) att_dates
         JOIN working.location_merge gol
             ON %10$s(
                 gol.geom,
@@ -369,15 +377,15 @@ BEGIN
                 END
             )
             AND (
-                gol.start_date BETWEEN %2$L::date AND %3$L::date
-                OR gol.end_date BETWEEN %2$L::date AND %3$L::date
-                OR (gol.start_date <= %2$L::date AND gol.end_date >= %3$L::date)
+                gol.start_date BETWEEN att_dates.attr_start_date AND att_dates.attr_end_date
+                OR gol.end_date BETWEEN att_dates.attr_start_date AND att_dates.attr_end_date
+                OR (gol.start_date <= att_dates.attr_start_date AND gol.end_date >= att_dates.attr_end_date)
             )
         WHERE att.attr_index_id = %13$L
     $SQL$,
         v_attr_concept_id,          -- 1: exposure_concept_id
-        v_attr_start_date,          -- 2: exposure_start_date/datetime, date-range filter
-        v_attr_end_date,            -- 3: exposure_end_date/datetime, date-range filter
+        v_attr_start_date,          -- 2: fallback start date for attr rows without their own window
+        v_attr_end_date,            -- 3: fallback end date for attr rows without their own window
         v_attr_source_concept_id,   -- 4: exposure_source_concept_id
         p_variable_name,            -- 5: exposure_source_value
         v_attr_schema,              -- 6: FROM attr instance schema
