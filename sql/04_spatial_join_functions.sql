@@ -28,6 +28,32 @@ RETURNS INTEGER AS $$
     END;
 $$ LANGUAGE sql IMMUTABLE;
 
+-- Map a data source geometry to an OMOP GIS "Geometry Type" concept for
+-- external_exposure.exposure_type_concept_id. Evaluated per feature, since a
+-- single source table can mix geometry types. Hard-coded until the GIS
+-- vocabulary is loaded and this can be looked up from vocabulary.concept.
+-- Any other geometry type (e.g. CIRCULARSTRING, MULTISURFACE) maps to
+-- Complex Geometry for now. Raster (2052496985), Solid (2052496974) and
+-- Element Relevant To Geometry (2052497051) are not produced: there is no
+-- raster join path yet and the others have no matching PostGIS type.
+CREATE OR REPLACE FUNCTION working.geometry_type_concept_id(p_geom GEOMETRY)
+RETURNS INTEGER AS $$
+    SELECT CASE GeometryType(p_geom)
+        WHEN 'POINT'              THEN 2052496994  -- Point
+        WHEN 'MULTIPOINT'         THEN 2052497013  -- MultiPoint
+        WHEN 'LINESTRING'         THEN 2052497023  -- LineString
+        WHEN 'MULTILINESTRING'    THEN 2052497014  -- MultiLineString
+        WHEN 'POLYGON'            THEN 2052496992  -- Polygon
+        WHEN 'MULTIPOLYGON'       THEN 2052497012  -- MultiPolygon
+        WHEN 'CURVEPOLYGON'       THEN 2052498289  -- CurvePolygon
+        WHEN 'GEOMETRYCOLLECTION' THEN 2052497042  -- GeometryCollection
+        WHEN 'TIN'                THEN 2052496959  -- Triangulated Irregular Network (TIN)
+        ELSE CASE WHEN p_geom IS NULL THEN 0
+                  ELSE 2052497069  -- Complex Geometry
+             END
+    END;
+$$ LANGUAGE sql IMMUTABLE PARALLEL SAFE;
+
 -- Main parameterized spatial join function
 -- Supports both 1-point (geometry in same table) and 2-point (geometry in separate table) joins
 CREATE OR REPLACE FUNCTION working.spatial_join_exposure(
@@ -123,7 +149,8 @@ BEGIN
                 GREATEST(att.attr_start_date::timestamp, gol.start_date::timestamp) AS exposure_start_datetime,
                 LEAST(att.attr_end_date::date, gol.end_date) AS exposure_end_date,
                 LEAST(att.attr_end_date::timestamp, gol.end_date::timestamp) AS exposure_end_datetime,
-                0 AS exposure_type_concept_id,
+                -- Typed from the original source geometry, not necessarily the buffered one used in the join.
+                working.geometry_type_concept_id(geo.geom) AS exposure_type_concept_id,
                 %L::integer AS exposure_relationship_concept_id,
                 NULL AS exposure_source_concept_id,
                 %L AS exposure_source_value,
@@ -215,7 +242,8 @@ BEGIN
                 GREATEST(att.attr_start_date::timestamp, gol.start_date::timestamp) AS exposure_start_datetime,
                 LEAST(att.attr_end_date::date, gol.end_date) AS exposure_end_date,
                 LEAST(att.attr_end_date::timestamp, gol.end_date::timestamp) AS exposure_end_datetime,
-                0 AS exposure_type_concept_id,
+                -- Typed from the original source geometry, not the buffered one used in the join.
+                working.geometry_type_concept_id(geo.geom) AS exposure_type_concept_id,
                 %L::integer AS exposure_relationship_concept_id,
                 CASE
                     WHEN att.attr_concept_id IS NOT NULL THEN att.attr_concept_id::float::int
@@ -381,7 +409,8 @@ BEGIN
             GREATEST(att_dates.attr_start_date::timestamp, gol.start_date::timestamp) AS exposure_start_datetime,
             LEAST(att_dates.attr_end_date, gol.end_date) AS exposure_end_date,
             LEAST(att_dates.attr_end_date::timestamp, gol.end_date::timestamp) AS exposure_end_datetime,
-            0 AS exposure_type_concept_id,
+            -- Typed from the original source geometry, not the buffered one used in the join.
+            working.geometry_type_concept_id(geo.geom_wgs84) AS exposure_type_concept_id,
             %14$L::integer AS exposure_relationship_concept_id,
             %4$L::integer AS exposure_source_concept_id,
             %5$L AS exposure_source_value,
@@ -589,6 +618,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 COMMENT ON FUNCTION working.spatial_relationship_concept_id IS 'Map a spatial join operator and buffer to an OMOP GIS Geometry Relationship concept_id (0 if unmapped)';
+COMMENT ON FUNCTION working.geometry_type_concept_id IS 'Map a geometry to an OMOP GIS Geometry Type concept_id (Complex Geometry if no specific concept, 0 if NULL)';
 COMMENT ON FUNCTION working.spatial_join_exposure IS 'Parameterized spatial join between locations and data source, supports both 1-point and 2-point geometries';
 COMMENT ON FUNCTION working.spatial_join_from_catalog IS 'Spatial join driven by backbone.attr_index/geom_index, joining the working.attr_<table_id>/geom_<table_id> instance tables created by backbone.gdsc_load_variable()';
 COMMENT ON FUNCTION working.spatial_join_all_from_catalog IS 'Run spatial_join_from_catalog for every variable loaded under a given table_id';
