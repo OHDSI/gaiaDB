@@ -1,6 +1,33 @@
 -- Spatial Join Functions
 -- Parameterized functions to perform spatial joins between locations and data sources
 
+-- Map the spatial operator (and buffer) used for a join to an OMOP GIS
+-- "Geometry Relationship" concept for external_exposure.exposure_relationship_concept_id.
+-- Hard-coded until the GIS vocabulary is loaded and this can be looked up from vocabulary.concept.
+-- Distance-based relationships with no corresponding join operator here
+-- (Separated by 2052496975, Near/Proximity to 2052497004, Beyond 2052497131)
+-- are not produced; unmapped operators return 0.
+CREATE OR REPLACE FUNCTION working.spatial_relationship_concept_id(
+    p_spatial_operator TEXT,
+    p_buffer_meters NUMERIC DEFAULT 0
+)
+RETURNS INTEGER AS $$
+    SELECT CASE
+        -- location falls within the geometry grown by a buffer
+        WHEN lower(p_spatial_operator) IN ('st_within', 'st_coveredby') AND COALESCE(p_buffer_meters, 0) > 0
+            THEN 2052496942  -- Within a Radius of [specific distance]
+        WHEN lower(p_spatial_operator) IN ('st_within', 'st_coveredby')
+            THEN 2052496943  -- Within
+        WHEN lower(p_spatial_operator) = 'st_intersects'
+            THEN 2052497024  -- Intersects
+        WHEN lower(p_spatial_operator) = 'st_overlaps'
+            THEN 2052496998  -- Overlaps
+        WHEN lower(p_spatial_operator) = 'st_touches'
+            THEN 2052497079  -- Adjacent to
+        ELSE 0
+    END;
+$$ LANGUAGE sql IMMUTABLE;
+
 -- Main parameterized spatial join function
 -- Supports both 1-point (geometry in same table) and 2-point (geometry in separate table) joins
 CREATE OR REPLACE FUNCTION working.spatial_join_exposure(
@@ -24,6 +51,7 @@ DECLARE
     v_attr_end_date DATE;
     v_count INTEGER;
     v_is_two_point BOOLEAN;
+    v_relationship_concept_id INTEGER;
 BEGIN
     -- Determine if this is a 1-point or 2-point join
     v_is_two_point := (p_geometry_source_table IS NOT NULL);
@@ -54,6 +82,8 @@ BEGIN
     END IF;
 
     RAISE NOTICE 'Processing spatial join for variable: % (ID: %)', p_variable_name, v_variable_source_id;
+
+    v_relationship_concept_id := working.spatial_relationship_concept_id(p_spatial_operator, p_buffer_meters);
 
     -- Build the SQL for 1-point join (geometry in same table as attributes)
     IF NOT v_is_two_point THEN
@@ -94,7 +124,7 @@ BEGIN
                 LEAST(att.attr_end_date::date, gol.end_date) AS exposure_end_date,
                 LEAST(att.attr_end_date::timestamp, gol.end_date::timestamp) AS exposure_end_datetime,
                 0 AS exposure_type_concept_id,
-                0 AS exposure_relationship_concept_id,
+                %L::integer AS exposure_relationship_concept_id,
                 NULL AS exposure_source_concept_id,
                 %L AS exposure_source_value,
                 CAST(NULL AS VARCHAR(50)) AS exposure_relationship_source_value,
@@ -132,6 +162,7 @@ BEGIN
                     OR (gol.start_date <= att.attr_start_date::date AND gol.end_date >= att.attr_end_date::date)
                 )
         $SQL$,
+            v_relationship_concept_id,  -- exposure_relationship_concept_id
             p_variable_name,  -- exposure_source_value
             p_variable_name,  -- column name for value_as_number
             v_attr_concept_id,
@@ -185,7 +216,7 @@ BEGIN
                 LEAST(att.attr_end_date::date, gol.end_date) AS exposure_end_date,
                 LEAST(att.attr_end_date::timestamp, gol.end_date::timestamp) AS exposure_end_datetime,
                 0 AS exposure_type_concept_id,
-                0 AS exposure_relationship_concept_id,
+                %L::integer AS exposure_relationship_concept_id,
                 CASE
                     WHEN att.attr_concept_id IS NOT NULL THEN att.attr_concept_id::float::int
                     ELSE 0
@@ -227,6 +258,7 @@ BEGIN
                     OR (gol.start_date <= att.attr_start_date::date AND gol.end_date >= att.attr_end_date::date)
                 )
         $SQL$,
+            v_relationship_concept_id,  -- exposure_relationship_concept_id
             p_variable_name,  -- exposure_source_value
             p_variable_name,  -- column name for value_as_number
             v_attr_concept_id,
@@ -278,6 +310,7 @@ DECLARE
     v_attr_start_date DATE;
     v_attr_end_date DATE;
     v_count INTEGER;
+    v_relationship_concept_id INTEGER;
 BEGIN
     -- Locate the catalog entry for this variable (optionally scoped to one table_id,
     -- since the same variable_name could in principle be loaded from multiple sources).
@@ -313,6 +346,8 @@ BEGIN
     RAISE NOTICE 'Processing catalog spatial join for variable: % (attr_index_id: %, attr table: %.%, geom table: %.%)',
         p_variable_name, v_attr_index_id, v_attr_schema, v_attr_table_name, v_geom_schema, v_geom_table_name;
 
+    v_relationship_concept_id := working.spatial_relationship_concept_id(p_spatial_operator, p_buffer_meters);
+
     v_sql := format($SQL$
         INSERT INTO working.external_exposure(
             location_id,
@@ -347,7 +382,7 @@ BEGIN
             LEAST(att_dates.attr_end_date, gol.end_date) AS exposure_end_date,
             LEAST(att_dates.attr_end_date::timestamp, gol.end_date::timestamp) AS exposure_end_datetime,
             0 AS exposure_type_concept_id,
-            0 AS exposure_relationship_concept_id,
+            %14$L::integer AS exposure_relationship_concept_id,
             %4$L::integer AS exposure_source_concept_id,
             %5$L AS exposure_source_value,
             CAST(NULL AS VARCHAR(50)) AS exposure_relationship_source_value,
@@ -395,7 +430,8 @@ BEGIN
         p_spatial_operator,         -- 10: spatial operator
         p_buffer_meters,            -- 11: buffer check/value
         v_unit_concept_id,          -- 12: unit_concept_id
-        v_attr_index_id             -- 13: restrict to this variable's rows in the shared attr_X table
+        v_attr_index_id,            -- 13: restrict to this variable's rows in the shared attr_X table
+        v_relationship_concept_id   -- 14: exposure_relationship_concept_id
     );
 
     RAISE NOTICE 'Executing catalog spatial join SQL...';
@@ -552,6 +588,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+COMMENT ON FUNCTION working.spatial_relationship_concept_id IS 'Map a spatial join operator and buffer to an OMOP GIS Geometry Relationship concept_id (0 if unmapped)';
 COMMENT ON FUNCTION working.spatial_join_exposure IS 'Parameterized spatial join between locations and data source, supports both 1-point and 2-point geometries';
 COMMENT ON FUNCTION working.spatial_join_from_catalog IS 'Spatial join driven by backbone.attr_index/geom_index, joining the working.attr_<table_id>/geom_<table_id> instance tables created by backbone.gdsc_load_variable()';
 COMMENT ON FUNCTION working.spatial_join_all_from_catalog IS 'Run spatial_join_from_catalog for every variable loaded under a given table_id';
