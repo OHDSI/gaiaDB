@@ -13,6 +13,7 @@ RUN apk add --no-cache \
     ca-certificates \
     git \
     p7zip \
+    coreutils \
     build-base \
     postgresql-dev \
     bc \
