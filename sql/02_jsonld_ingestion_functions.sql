@@ -251,6 +251,7 @@ BEGIN
             ELSE
                 INSERT INTO backbone.attr_index (
                     geom_index_id,
+                    variable_source_id,
                     table_name,
                     variable_name,
                     variable_desc,
@@ -262,6 +263,9 @@ BEGIN
                     database_schema
                 ) VALUES (
                     v_geom_index_id,
+                    (SELECT vs.variable_source_id FROM backbone.variable_source vs
+                     WHERE vs.data_source_uuid = p_data_source_uuid
+                       AND vs.variable_name = v_variable->>'name'),
                     v_table_id,
                     v_variable->>'name',
                     COALESCE(v_variable->>'description', v_variable->>'name'),
@@ -273,6 +277,15 @@ BEGIN
                     'working'
                 );
             END IF;
+        ELSE
+            UPDATE backbone.attr_index ai
+            SET variable_source_id = vs.variable_source_id
+            FROM backbone.variable_source vs
+            WHERE vs.data_source_uuid = p_data_source_uuid
+              AND vs.variable_name = v_variable->>'name'
+              AND ai.table_name = v_table_id
+              AND ai.variable_name = v_variable->>'name'
+              AND ai.variable_source_id IS NULL;
         END IF;
 
         v_count := v_count + 1;

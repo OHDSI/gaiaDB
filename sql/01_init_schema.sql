@@ -158,6 +158,7 @@ CREATE TABLE backbone.attr_index (
       FOREIGN KEY (geom_index_id) 
       REFERENCES backbone.geom_index (geom_index_id),
     table_name varchar(255) NOT NULL,
+    variable_source_id int4 NULL REFERENCES backbone.variable_source(variable_source_id),
     variable_name varchar NOT NULL,
     variable_desc text NOT NULL,
     attr_concept_id int4 NULL,

@@ -259,6 +259,16 @@ BEGIN
 		);
 	END IF;
 
+	-- Record the observed geometry type (most frequent feature type) on the catalog row.
+	EXECUTE format(
+		'UPDATE backbone.geom_index SET geom_type_concept_id = (
+		     SELECT working.geometry_type_concept_id(geom_wgs84) FROM working.%I
+		     WHERE geom_wgs84 IS NOT NULL
+		     GROUP BY 1 ORDER BY count(*) DESC, 1 LIMIT 1)
+		 WHERE geom_index_id = %L AND geom_type_concept_id IS NULL',
+		geom_table_name, geom_id
+	);
+
 	-- =================================================================
 	-- attr_index catalog row -- create if missing (see geom_index note).
 	-- =================================================================

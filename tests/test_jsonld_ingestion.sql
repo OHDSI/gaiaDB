@@ -674,22 +674,15 @@ $$;
 
 
 -- =========================================================================
--- TEST 14: Load LOCATION / LOCATION_HISTORY fixture data and verify the
---          spatial join pipeline populates EXTERNAL_EXPOSURE
+-- TEST 14: Load LOCATION / LOCATION_HISTORY fixture data
 --
 -- Uses a representative sample from extras/csv/LOCATION.csv and
--- extras/csv/LOCATION_HISTORY.csv (Fresno, CA points). Location-history
--- dates are set to 2021-2023 so they overlap the rpl_themes variable
--- period (2022-01-01 to 2022-12-31).
+-- extras/csv/LOCATION_HISTORY.csv (Fresno, CA points). The spatial join
+-- itself is covered by TEST 15.
 -- =========================================================================
 SAVEPOINT t14;
 
 DO $$
-DECLARE
-    v_uuid  UUID;
-    v_count INTEGER;
-    v_doc   JSONB;
-    v_row   RECORD;
 BEGIN
     -- Load LOCATION rows with geometry built from lat/lon
     INSERT INTO working.location
@@ -719,56 +712,6 @@ BEGIN
 
     PERFORM _assert('T14.3 location_merge view joins location and location_history',
         (SELECT COUNT(*) FROM working.location_merge WHERE location_id IN (9001, 9002, 9003)) = 3);
-
-    -- Ingest fixture data source + variables (rpl_themes has startDate/endDate 2022)
-    SELECT doc INTO v_doc FROM fixture;
-    v_uuid := backbone.ingest_jsonld_metadata(v_doc);
-    PERFORM backbone.ingest_jsonld_variables(v_doc, v_uuid);
-
-    -- Staging table: one polygon covering all three Fresno points, one rpl_themes value
-    EXECUTE $SQL$
-        CREATE TEMP TABLE _test_svi_t14 (
-            rpl_themes DOUBLE PRECISION,
-            geom       GEOMETRY(GEOMETRY, 4326)
-        )
-    $SQL$;
-
-    EXECUTE $SQL$
-        INSERT INTO _test_svi_t14 (rpl_themes, geom)
-        VALUES (0.75, ST_SetSRID(ST_MakeEnvelope(-120.0, 36.5, -119.5, 37.1), 4326))
-    $SQL$;
-
-    -- Run the spatial join
-    v_count := working.spatial_join_exposure(
-        'rpl_themes',
-        '_test_svi_t14',
-        NULL, NULL, NULL,
-        'st_within',
-        0
-    );
-
-    PERFORM _assert('T14.4 spatial_join_exposure matched at least one location',
-        v_count > 0);
-
-    PERFORM _assert('T14.5 external_exposure rows created',
-        (SELECT COUNT(*) FROM working.external_exposure) > 0);
-
-    SELECT * INTO v_row
-    FROM working.external_exposure
-    WHERE location_id IN (9001, 9002, 9003)
-    LIMIT 1;
-
-    PERFORM _assert('T14.6 exposure location_id traces back to a loaded location',
-        v_row.location_id IN (9001, 9002, 9003));
-
-    PERFORM _assert('T14.7 person_id populated from entity_id (domain_id = 1147314)',
-        v_row.person_id > 0);
-
-    PERFORM _assert('T14.8 exposure_source_value is the variable name',
-        v_row.exposure_source_value = 'rpl_themes');
-
-    PERFORM _assert('T14.9 value_as_number reflects the staged rpl_themes value',
-        v_row.value_as_number = 0.75);
 END;
 $$;
 
@@ -864,8 +807,24 @@ BEGIN
     PERFORM _assert('T15.7 value_as_number reflects the working.attr_* instance value',
         v_row.value_as_number = 0.75);
 
-    PERFORM _assert('T15.8 exposure_source_value is the variable name',
+    PERFORM _assert('T15.8 exposure_source_value falls back to the variable name when no variable_source is linked',
         v_row.exposure_source_value = 'rpl_themes');
+
+    PERFORM _assert('T15.10 exposure_type_concept_id defaults to 0 (not the geometry type)',
+        v_row.exposure_type_concept_id = 0);
+
+    PERFORM _assert('T15.11 exposure_relationship_source_value is the verbatim operator',
+        v_row.exposure_relationship_source_value = 'ST_Within'
+        AND v_row.exposure_relationship_concept_id = 2052496943);
+
+    PERFORM _assert('T15.12 geom_index.geom_type_concept_id is taken from the observed geometry (Polygon)',
+        (SELECT geom_type_concept_id FROM backbone.geom_index WHERE table_name = '_test_svi_catalog') = 2052496992);
+
+    DELETE FROM working.external_exposure WHERE location_id = 9101;
+    v_count := working.spatial_join_from_catalog('rpl_themes', '_test_svi_catalog',
+                                                 p_exposure_type_concept_id => 2052499878);
+    PERFORM _assert('T15.13 p_exposure_type_concept_id is written to exposure_type_concept_id',
+        (SELECT exposure_type_concept_id FROM working.external_exposure WHERE location_id = 9101) = 2052499878);
 
     PERFORM _assert('T15.9 exposure dates reflect attr_index (not the never-populated instance row)',
         v_row.exposure_start_date = '2022-01-01' AND v_row.exposure_end_date = '2022-12-31');

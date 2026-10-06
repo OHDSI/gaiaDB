@@ -228,10 +228,8 @@ To re-run a join, clear prior output first with `SELECT working.clear_exposure_d
 | `backbone.gdsc_get_loaded_variables_for_table(table_id)` | List variables already loaded for a table |
 | **Spatial join** (`sql/04`) | |
 | `working.spatial_join_all_from_catalog(table_id, operator, buffer_m)` | Join every loaded variable for a table |
-| `working.spatial_join_from_catalog(variable, table_id, operator, buffer_m)` | Join a single catalogued variable |
+| `working.spatial_join_from_catalog(variable, table_id, operator, buffer_m, exposure_type_concept_id)` | Join a single catalogued variable; the last argument is the Exposure Type Concept of the data source (default 0) |
 | `working.exposure_statistics()` / `working.clear_exposure_data(variable)` | Summarize or clear `external_exposure` |
-
-`working.spatial_join_exposure()`, `spatial_join_simple()`, and `spatial_join_all_variables()` are the older join path. They read raw tables directly rather than the catalog and use a single date range per variable. Prefer the `*_from_catalog` functions.
 
 ## Support
 
