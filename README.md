@@ -14,6 +14,7 @@ A PostGIS Docker image for the [OHDSI GIS workgroup](https://github.com/OHDSI). 
 - [Ingestion Protocol](#ingestion-protocol)
 - [Dataset Structure](#dataset-structure)
 - [Loading Variables and Spatial Joins](#loading-variables-and-spatial-joins)
+- [Raster Sources](#raster-sources)
 - [End-to-End Demo](#end-to-end-demo)
 - [Function Reference](#function-reference)
 - [Support](#support)
@@ -102,15 +103,27 @@ After the container is running, ingest a dataset with a single SQL call:
 SELECT * FROM backbone.ingest_datasource('ma_2022_svi_tract');
 ```
 
-This runs three steps in sequence and streams a status row for each:
+This runs three steps in sequence (four for a raster) and streams a status row for each:
 
 | Step | Script / Action | Description |
 |------|----------------|-------------|
-| `metadata_load` | `load_datasource_metadata()` | Reads `/data/{table_id}/meta_json-ld_{table_id}.json`, populates `backbone.data_source` and `backbone.variable_source`, and registers `backbone.geom_index` / `backbone.attr_index` catalog entries (variables without `startDate`/`endDate` are skipped from `attr_index` with a warning) |
+| `metadata_load` | `load_datasource_metadata()` | Reads `/data/{table_id}/meta_json-ld_{table_id}.json`, populates `backbone.data_source` and `backbone.variable_source`, and registers `backbone.geom_index` / `backbone.attr_index` catalog entries (variables whose dates are ambiguous, see below, are skipped from `attr_index` with a warning) |
 | `ingestion` | `{table_id}_osgeo.sh` | Downloads the source file and loads it into PostGIS via `ogr2ogr` |
 | `postgis` | `{table_id}_postgis.sh` | Cleans geometry (`ST_MakeValid`), adds a local-projection column, creates spatial index |
 
 The postgis step is skipped automatically if the osgeo step fails.
+
+### Variable dates
+
+A variable's period is `startDate`/`endDate` in the JSON-LD. A date may be given only to the year (`"2021"`) or the month (`"2021-03"`) and then stands for the whole period (1 January to 31 December, or the whole month). When only one end is given, the other is the end of the same period: `startDate` `"2021"` alone is the year 2021. A variable with neither date takes, in this order, the dataset's `temporalCoverage` (`"2014-01-01/2019-12-31"`, or a single year or date); the **static** period when the dataset is marked static (below); and, for a **raster** source only, the year in the dataset name (leading, `"2021 Miami-Dade NLCD Land Cover"`) and the table_id (`mdc_2021_nlcd_land_cover`), which must agree when both have one. A dataset whose attributes do not change over time (an elevation model, the area of a boundary) is marked in its JSON-LD, for any data structure:
+
+```json
+"additionalProperty": [{"@type": "PropertyValue", "name": "temporalDimension", "value": "static"}]
+```
+
+Its undated variables get the period 1900-01-01 to 2100-12-31, so a join returns them for the whole residence period, as for a geometry-only source. For a vector or table dataset only variables with a numeric `qudt:dataType` (`float8`, `int4`, ...) are registered this way: identifiers and names (`varchar`, `string`, no type) stay unregistered, because the variable loader writes each registered variable's column into a numeric value field. A **raster** that is not marked and still has no date is treated as static in the same way, like an elevation model. The exception is a raster whose name and table_id disagree on the year: that is ambiguous and the variable is skipped with a warning. **Vector** variables without dates, in a dataset that is not marked static, are still skipped (a warning): many are undated on purpose, such as identifiers, names and the attributes of a vintage. Every date taken from somewhere other than the variable's own full dates is reported with a `NOTICE`. Explicit dates always win, so check them: a wrong `startDate` is used as it is.
+
+For a **raster** source (`measurementTechnique` term `raster` in the JSON-LD) the `postgis` step loads the raster table (`raster2pgsql`) and a fourth step, `raster_register`, calls `backbone.gdsc_load_all_raster_variables()` so the variables and their layers are registered in `backbone.attr_index` / `backbone.raster_layer`. For a table loaded from one file per period, list the periods in a `raster_layers` array in `/data/{table_id}/meta_etl_{table_id}.json` (`[{"filename": "...", "start_date": "...", "end_date": "..."}]`); without it the whole table is one layer over the variable's dates. See [Raster Sources](#raster-sources).
 
 ### Individual steps
 
@@ -180,6 +193,24 @@ The spatial join uses each row's window, not the variable's overall span in `att
 
 ---
 
+## Raster Sources
+
+A raster (e.g. NLCD tree canopy, or an annual exposure series) is loaded by its `_postgis.sh` step with `raster2pgsql` into `public.{table_id}` (column `rast`, one row per tile; add `-F` for a `filename` column when several files go into one table) and is **not** copied into `geom_*` / `attr_*` tables. Two steps make it joinable:
+
+1. **`backbone.gdsc_load_all_raster_variables(table_id, layers, source, band)`** (or `gdsc_load_raster_variable(params)` for one variable) registers each variable of the table in `backbone.attr_index` and writes its layers to `backbone.raster_layer`; `ingest_datasource` calls it for you for raster sources (see Ingestion Protocol), and you can call it yourself for a raster you loaded by hand. Each layer records the raster table, band, SRID and the period it stands for. Pass `layers` as `[{"filename": "...", "start_date": "...", "end_date": "..."}]` for a table with one file per period (an annual series); without it the whole table is one layer over the variable's dates. The geometry type concept on `geom_index` is set to Raster (2052496985).
+2. **`working.spatial_join_raster_from_catalog(variable, table_id, method, buffer_m, exposure_type_concept_id)`** matches `working.location_merge` rows to the layers whose period overlaps theirs and writes `working.external_exposure`, with the exposure dates clipped to the overlap, as for vector sources. `method` is `point` (the value of the cell containing the location, `ST_Value`; nodata or outside the raster gives no row), `buffer_mean` (the mean of the cells whose centre is within `buffer_m` metres, `ST_Clip` + `ST_SummaryStats` over the tiles; the buffer is a geography buffer, as for vector sources) or `class_fraction` (categorical rasters: one row per class present in the buffer, with the share of the valid cells in `value_as_number` and the class value in `modifier_source_value`; classes with share 0 get no row, and the shares of a location period sum to 1). A location on a tile edge gets one value per layer.
+
+```sql
+SELECT * FROM backbone.gdsc_load_all_raster_variables('synthetic_raster_annual',
+    p_layers => '[{"filename": "synthetic_raster_annual_2014.tif", "start_date": "2014-01-01", "end_date": "2014-12-31"}, ...]');
+SELECT working.spatial_join_raster_from_catalog('pm25_annual', 'synthetic_raster_annual', 'point', 0, 2052499878);
+SELECT working.spatial_join_raster_from_catalog('pm25_annual', 'synthetic_raster_annual', 'buffer_mean', 1000, 2052499878);
+```
+
+Locations are transformed to the raster's SRID, so the raster can be in any projection. For a categorical raster `point` returns the class code as `value_as_number`; class codes are not mapped to concepts (open design questions are on [OHDSI/GIS#537](https://github.com/OHDSI/GIS/issues/537)). Example rasters with an answer key are in [`syntheticDataGIS/raster`](https://github.com/OHDSI/GIS/tree/main/syntheticDataGIS/raster); the unit tests are in `tests/test_raster_join.sql`.
+
+---
+
 ## End-to-End Demo
 
 ```sql
@@ -226,6 +257,10 @@ To re-run a join, clear prior output first with `SELECT working.clear_exposure_d
 | `backbone.gdsc_load_all_variables(table_id, geom_label, nodata, source)` | Build instance tables for every variable in `attr_index` |
 | `backbone.gdsc_load_variable(params jsonb)` | Build instance tables for a single variable |
 | `backbone.gdsc_get_loaded_variables_for_table(table_id)` | List variables already loaded for a table |
+| **Raster** (`sql/07`) | |
+| `backbone.gdsc_load_all_raster_variables(table_id, layers, source, band)` | Register every variable of a raster table and its layers |
+| `backbone.gdsc_load_raster_variable(params jsonb)` | Register a single raster variable and its layers in `backbone.raster_layer` |
+| `working.spatial_join_raster_from_catalog(variable, table_id, method, buffer_m, exposure_type_concept_id)` | Join a raster variable by `point`, `buffer_mean` or `class_fraction` |
 | **Spatial join** (`sql/04`) | |
 | `working.spatial_join_all_from_catalog(table_id, operator, buffer_m)` | Join every loaded variable for a table |
 | `working.spatial_join_from_catalog(variable, table_id, operator, buffer_m, exposure_type_concept_id)` | Join a single catalogued variable; the last argument is the Exposure Type Concept of the data source (default 0) |
@@ -245,4 +280,5 @@ Please use the [GitHub issue tracker](https://github.com/OHDSI/gaiaDB/issues) fo
 - Run the test suite against a live container before submitting (all test data is rolled back):
   ```bash
   docker exec -i gaia-db psql -U postgres -d gaiacore < tests/test_jsonld_ingestion.sql
+  docker exec -i gaia-db psql -U postgres -d gaiacore < tests/test_raster_join.sql
   ```

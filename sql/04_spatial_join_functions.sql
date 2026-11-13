@@ -33,9 +33,10 @@ $$ LANGUAGE sql IMMUTABLE;
 -- single source table can mix geometry types. Hard-coded until the GIS
 -- vocabulary is loaded and this can be looked up from vocabulary.concept.
 -- Any other geometry type (e.g. CIRCULARSTRING, MULTISURFACE) maps to
--- Complex Geometry for now. Raster (2052496985), Solid (2052496974) and
--- Element Relevant To Geometry (2052497051) are not produced: there is no
--- raster join path yet and the others have no matching PostGIS type.
+-- Complex Geometry for now. Solid (2052496974) and Element Relevant To
+-- Geometry (2052497051) are not produced: they have no matching PostGIS type.
+-- Raster (2052496985) is not a GEOMETRY: backbone.gdsc_load_raster_variable
+-- (07_raster_functions.sql) sets it on geom_index for raster sources.
 CREATE OR REPLACE FUNCTION working.geometry_type_concept_id(p_geom GEOMETRY)
 RETURNS INTEGER AS $$
     SELECT CASE GeometryType(p_geom)

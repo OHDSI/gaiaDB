@@ -2,6 +2,62 @@
 -- Parse and load JSON-LD metadata and variable definitions into backbone tables.
 
 -- ---------------------------------------------------------------------------
+-- backbone.parse_partial_date
+-- Parse a JSON-LD date that may be given only to the year ("2021") or the month ("2021-03").
+-- With p_end = FALSE the first day of the period is returned (2021-01-01, 2021-03-01), with
+-- p_end = TRUE the last (2021-12-31, 2021-03-31). A full date or an ISO timestamp gives its date.
+-- NULL when the text is empty or not a date.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION backbone.parse_partial_date(p_text TEXT, p_end BOOLEAN DEFAULT FALSE)
+RETURNS DATE AS $$
+DECLARE
+    t TEXT := btrim(p_text);
+    d DATE;
+BEGIN
+    IF t IS NULL OR t = '' THEN
+        RETURN NULL;
+    ELSIF t ~ '^[0-9]{4}$' THEN
+        RETURN CASE WHEN p_end THEN make_date(t::int, 12, 31) ELSE make_date(t::int, 1, 1) END;
+    ELSIF t ~ '^[0-9]{4}-[0-9]{2}$' THEN
+        d := (t || '-01')::date;
+        RETURN CASE WHEN p_end THEN (d + interval '1 month - 1 day')::date ELSE d END;
+    END IF;
+    RETURN left(t, 10)::date;
+EXCEPTION WHEN OTHERS THEN
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+
+-- ---------------------------------------------------------------------------
+-- backbone.infer_dataset_year
+-- The year a dataset stands for when its metadata gives no dates at all: the leading year of the
+-- dataset name ("2021 Miami-Dade NLCD Land Cover") or the year after the first segment of the
+-- table_id (mdc_2021_nlcd_land_cover). When both are present they must agree. NULL otherwise.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION backbone.infer_dataset_year(p_table_id TEXT, p_name TEXT)
+RETURNS INTEGER AS $$
+    SELECT CASE WHEN id_year IS NOT NULL AND name_year IS NOT NULL AND id_year <> name_year THEN NULL
+                ELSE COALESCE(id_year, name_year) END
+    FROM (SELECT substring(p_table_id from '^[^_]+_((?:19|20)[0-9]{2})_')::int AS id_year,
+                 substring(p_name from '^\s*((?:19|20)[0-9]{2})(?![0-9])')::int AS name_year) y;
+$$ LANGUAGE sql IMMUTABLE;
+
+
+-- ---------------------------------------------------------------------------
+-- backbone.dataset_year_conflict
+-- TRUE when the table_id and the dataset name each carry a year (see infer_dataset_year) and the
+-- years differ: the year of the dataset is then unclear and is not guessed.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION backbone.dataset_year_conflict(p_table_id TEXT, p_name TEXT)
+RETURNS BOOLEAN AS $$
+    SELECT COALESCE(id_year <> name_year, FALSE)
+    FROM (SELECT substring(p_table_id from '^[^_]+_((?:19|20)[0-9]{2})_')::int AS id_year,
+                 substring(p_name from '^\s*((?:19|20)[0-9]{2})(?![0-9])')::int AS name_year) y;
+$$ LANGUAGE sql IMMUTABLE;
+
+
+-- ---------------------------------------------------------------------------
 -- backbone.ingest_jsonld_metadata
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION backbone.ingest_jsonld_metadata(jsonld_data JSONB)
@@ -132,6 +188,19 @@ DECLARE
     v_geom_type       TEXT;
     v_table_id        TEXT;
     v_geom_index_id   INTEGER;
+    v_structure       TEXT;
+    v_coverage        TEXT;
+    v_cov_start       DATE;
+    v_cov_end         DATE;
+    v_name_year       INTEGER;
+    v_year_conflict   BOOLEAN := FALSE;
+    v_static_marked   BOOLEAN := FALSE;
+    v_date_note       TEXT;
+    v_numeric         BOOLEAN;
+    -- period of an attribute that does not change over time (a DEM, a boundary's area): like a
+    -- geometry-only source it is valid whenever a location is
+    v_static_start    CONSTANT DATE := DATE '1900-01-01';
+    v_static_end      CONSTANT DATE := DATE '2100-12-31';
 BEGIN
     -- Resolve table_id / geom_type / dataset_name once, up front, so
     -- geom_index/attr_index can be registered alongside variable_source.
@@ -150,6 +219,36 @@ BEGIN
         v_dataset_id, '/',
         array_length(string_to_array(v_dataset_id, '/'), 1)
     );
+
+    -- Dataset-level fallbacks for variables without dates: the temporalCoverage ("2014-01-01/2019-12-31",
+    -- or a single year or date), and for raster sources the year in the name or table_id.
+    v_coverage := NULLIF(btrim(jsonld_data->>'temporalCoverage'), '');
+    IF v_coverage IS NOT NULL THEN
+        v_cov_start := backbone.parse_partial_date(split_part(v_coverage, '/', 1), FALSE);
+        v_cov_end   := backbone.parse_partial_date(COALESCE(NULLIF(split_part(v_coverage, '/', 2), ''), split_part(v_coverage, '/', 1)), TRUE);
+        IF v_cov_start IS NULL OR v_cov_end IS NULL THEN
+            v_cov_start := NULL; v_cov_end := NULL;
+        END IF;
+    END IF;
+
+    -- A dataset can declare that its attributes do not change over time with
+    --   "additionalProperty": [{"@type": "PropertyValue", "name": "temporalDimension", "value": "static"}]
+    SELECT EXISTS (
+        SELECT 1
+        FROM jsonb_array_elements(CASE WHEN jsonb_typeof(jsonld_data->'additionalProperty') = 'array'
+                                       THEN jsonld_data->'additionalProperty' ELSE '[]'::jsonb END) ap
+        WHERE lower(ap->>'name') = 'temporaldimension' AND lower(ap->>'value') = 'static'
+    ) INTO v_static_marked;
+
+    SELECT lower(elem->>'termCode') INTO v_structure
+    FROM jsonb_array_elements(CASE WHEN jsonb_typeof(jsonld_data->'measurementTechnique') = 'array'
+                                   THEN jsonld_data->'measurementTechnique' ELSE '[]'::jsonb END) elem
+    WHERE elem->'inDefinedTermSet'->>'name' = 'dataRepresentation'
+    LIMIT 1;
+    IF v_structure = 'raster' THEN
+        v_name_year := backbone.infer_dataset_year(v_table_id, v_dataset_name);
+        v_year_conflict := backbone.dataset_year_conflict(v_table_id, v_dataset_name);
+    END IF;
 
     -- Register a geom_index catalog entry for this table_id if one doesn't
     -- already exist. This only creates the catalog row -- it does NOT create
@@ -186,18 +285,45 @@ BEGIN
             v_attr_concept_id := NULL;
         END;
 
-        -- Dates are stored in ISO format (YYYY-MM-DD) in the JSON-LD
-        BEGIN
-            v_start_date := (v_variable->>'startDate')::DATE;
-        EXCEPTION WHEN OTHERS THEN
-            v_start_date := NULL;
-        END;
-
-        BEGIN
-            v_end_date := (v_variable->>'endDate')::DATE;
-        EXCEPTION WHEN OTHERS THEN
-            v_end_date := NULL;
-        END;
+        -- Dates are ISO (YYYY-MM-DD), but a year ("2021") or a month ("2021-03") is accepted: it stands for
+        -- the whole period (1 January to 31 December). When only one end is given the other is the end of
+        -- the same period, so startDate "2021" alone is the year 2021. A variable without dates takes the
+        -- dataset's temporalCoverage, then the static period (1900-01-01 to 2100-12-31) when the dataset is
+        -- marked temporalDimension static (a raster, or a variable with a numeric qudt:dataType: identifiers and
+        -- names stay unregistered), then for a raster the year in its name or table_id; a raster with
+        -- no date at all is static, unless its name and table_id disagree on a year.
+        -- Other vector sources are not given a default: many of their variables are undated on purpose
+        -- (identifiers, names, attributes of a vintage), and registering them all would load every one of them.
+        v_date_note := NULL;
+        v_numeric := lower(COALESCE(v_variable->>'qudt:dataType', '')) IN (
+            'float', 'float4', 'float8', 'real', 'double', 'double precision', 'numeric', 'decimal', 'number',
+            'int', 'int2', 'int4', 'int8', 'int16', 'int32', 'int64', 'smallint', 'integer', 'bigint', 'long', 'short');
+        v_start_date := backbone.parse_partial_date(v_variable->>'startDate', FALSE);
+        v_end_date   := backbone.parse_partial_date(v_variable->>'endDate', TRUE);
+        IF v_start_date IS NULL AND v_end_date IS NOT NULL THEN
+            v_start_date := backbone.parse_partial_date(v_variable->>'endDate', FALSE);
+            v_date_note := 'the period of endDate';
+        ELSIF v_end_date IS NULL AND v_start_date IS NOT NULL THEN
+            v_end_date := backbone.parse_partial_date(v_variable->>'startDate', TRUE);
+            v_date_note := 'the period of startDate';
+        ELSIF v_start_date IS NULL AND v_end_date IS NULL THEN
+            IF v_cov_start IS NOT NULL THEN
+                v_start_date := v_cov_start; v_end_date := v_cov_end;
+                v_date_note := 'the dataset temporalCoverage';
+            ELSIF v_static_marked AND (v_structure = 'raster' OR v_numeric) THEN
+                v_start_date := v_static_start; v_end_date := v_static_end;
+                v_date_note := 'the static period (the dataset is marked temporalDimension static)';
+            ELSIF v_name_year IS NOT NULL THEN
+                v_start_date := make_date(v_name_year, 1, 1); v_end_date := make_date(v_name_year, 12, 31);
+                v_date_note := 'the year in the dataset name or table_id';
+            ELSIF v_structure = 'raster' AND NOT v_year_conflict THEN
+                v_start_date := v_static_start; v_end_date := v_static_end;
+                v_date_note := 'the static period (no date anywhere in the metadata)';
+            END IF;
+        END IF;
+        IF v_date_note IS NOT NULL THEN
+            RAISE NOTICE 'Variable "%": dates % to % taken from %', v_variable->>'name', v_start_date, v_end_date, v_date_note;
+        END IF;
 
         INSERT INTO backbone.variable_source (
             data_source_uuid,

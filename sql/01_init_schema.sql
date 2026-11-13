@@ -529,3 +529,4 @@ ALTER TABLE vocabulary.drug_strength
 \i /sql/04_spatial_join_functions.sql
 \i /sql/05_data_source_retrieval_functions.sql
 \i /sql/06_gdsc_catalog_functions.sql
+\i /sql/07_raster_functions.sql

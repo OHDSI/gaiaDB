@@ -152,6 +152,9 @@ $$ LANGUAGE plpgsql;
 --   1. Load JSON-LD metadata (ingest_jsonld_metadata + ingest_jsonld_variables)
 --   2. Run {table_id}_osgeo.sh   — download source file and load via ogr2ogr
 --   3. Run {table_id}_postgis.sh — clean geometry and add local projection column
+--      (for a raster source, load the raster table)
+--   4. Raster sources only (structure raster in the JSON-LD): register the variables and layers
+--      with gdsc_load_all_raster_variables, taking the layers from the ETL metadata
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION backbone.ingest_datasource(
     p_table_id TEXT,
@@ -165,6 +168,8 @@ DECLARE
     v_osgeo_script     TEXT;
     v_postgis_script   TEXT;
     v_osgeo_ok         BOOLEAN := TRUE;
+    v_structure        TEXT;
+    v_raster_vars      INTEGER;
     v_step             TEXT;
     v_status           TEXT;
     v_message          TEXT;
@@ -191,6 +196,8 @@ BEGIN
     step    := 'metadata_load'; status := 'success';
     message := format('Loaded "%s" with %s variables', v_dataset_name, v_variables_loaded);
     RETURN NEXT;
+
+    v_structure := backbone.datasource_structure(v_data_source_uuid);
 
     -- Step 2: osgeo — download source data and load into PostGIS via ogr2ogr.
     -- Stream each row from retrieve_and_ingest_datasource, tracking any error in one pass.
@@ -225,8 +232,30 @@ BEGIN
     END;
 
     step    := 'postgis'; status := 'success';
-    message := format('Geometry updated for %s', v_dataset_name);
+    message := CASE WHEN v_structure = 'raster' THEN format('Raster loaded for %s', v_dataset_name)
+                    ELSE format('Geometry updated for %s', v_dataset_name) END;
     RETURN NEXT;
+
+    IF v_structure = 'raster' THEN
+        step := 'raster_register'; status := 'in_progress';
+        message := 'Registering raster variables and layers';
+        RETURN NEXT;
+
+        BEGIN
+            SELECT count(*) INTO v_raster_vars
+            FROM backbone.gdsc_load_all_raster_variables(
+                p_table_id, backbone.raster_layers_from_etl_metadata(p_table_id), v_dataset_name);
+        EXCEPTION WHEN OTHERS THEN
+            step := 'raster_register'; status := 'error';
+            message := format('Raster registration failed: %s', SQLERRM);
+            RETURN NEXT;
+            RETURN;
+        END;
+
+        step := 'raster_register'; status := 'success';
+        message := format('Registered %s raster variable(s) for %s', v_raster_vars, v_dataset_name);
+        RETURN NEXT;
+    END IF;
 
     step    := 'complete'; status := 'success';
     message := format('Ingestion complete for %s', v_dataset_name);
