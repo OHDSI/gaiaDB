@@ -15,6 +15,7 @@ A PostGIS Docker image for the [OHDSI GIS workgroup](https://github.com/OHDSI). 
 - [Dataset Structure](#dataset-structure)
 - [Loading Variables and Spatial Joins](#loading-variables-and-spatial-joins)
 - [Raster Sources](#raster-sources)
+- [Point Sources](#point-sources-voronoi-cells-and-nearest-point-joins)
 - [End-to-End Demo](#end-to-end-demo)
 - [Function Reference](#function-reference)
 - [Support](#support)
@@ -211,6 +212,26 @@ Locations are transformed to the raster's SRID, so the raster can be in any proj
 
 ---
 
+## Point Sources: Voronoi Cells and Nearest-Point Joins
+
+A point source (monitors, sensors) has no area, so `spatial_join_from_catalog` can only join it through a distance buffer, which gives a location no monitor, or several rows (one per monitor in range). Two functions in `sql/08` assign each location the value of its nearest monitor instead:
+
+1. **`backbone.create_voronoi_source(source_table_id, target_table_id, clip, working_srid, segment_m)`** builds the Voronoi (Thiessen) cells of a point table in `public` as a new polygon table with the same attributes (the series of each monitor stays with its cell). A location inside a cell is closer to the cell's monitor than to any other, so the cells join like any polygon source: register them (JSON-LD, `gdsc_load_all_variables`) and run `spatial_join_from_catalog(..., 'ST_Within')`. Each time window gives one row with the dates clipped to the residence period. The cells are computed in a projected CRS (`working_srid`, default the UTM zone of the points; Voronoi cells must not be computed in lon/lat), cut to `clip` (default: the bounding box of the points enlarged by 10% of its longer side, since the outer cells are unbounded) and returned in the CRS of the point table. Points at identical locations are an error; a point outside `clip` has no cell. The catalog's `_postgis.sh` step of a derived source calls it (for example `synthetic_monitors_60_voronoi`, built from `synthetic_monitors_60`).
+2. **`working.spatial_join_nearest_from_catalog(variable, table_id, k, max_distance_m, idw_power, record_distance, exposure_type_concept_id)`** joins a loaded point variable without building cells: `k` = 1 (default) is the value of the nearest point, a larger `k` the inverse-distance weighted mean of the `k` nearest (weights 1 / distance^`idw_power`). Distances are geodesic, in metres; a point with no value for a window is not a candidate for it; `max_distance_m` drops points that are too far, and a location with none gets no row. The relationship is "Near/Proximity to" (2052497004) and the method (`nearest`, `idw k=3 power=2`) is written verbatim to `exposure_relationship_source_value`. With `record_distance` the distance to the nearest point is written to `modifier_source_value` (`distance_m=201.4`).
+
+The two agree: a location is in the cell of its nearest monitor. They differ only where two monitors are almost equally far, because the cells use distances in the working CRS and the join geodesic ones (in an Albers map such as EPSG:5070 distances are off by up to about 0.7%, depending on direction, around Los Angeles). The nearest-point join compares every location with every point, which is fine for networks of up to some thousands of points; for more, build the cells.
+
+```sql
+-- the cells, from a point source that has been ingested
+SELECT backbone.create_voronoi_source('synthetic_monitors_60', 'synthetic_monitors_60_voronoi');
+-- or the nearest monitor without cells; k = 3 gives an inverse-distance weighted mean
+SELECT working.spatial_join_nearest_from_catalog('pm25_monitor', 'synthetic_monitors_60', 1, NULL, 2, TRUE, 2052499878);
+```
+
+Example monitors with an answer key are in [`syntheticDataGIS/monitors`](https://github.com/OHDSI/GIS/tree/main/syntheticDataGIS/monitors); the unit tests are in `tests/test_point_sources.sql`.
+
+---
+
 ## End-to-End Demo
 
 ```sql
@@ -261,6 +282,9 @@ To re-run a join, clear prior output first with `SELECT working.clear_exposure_d
 | `backbone.gdsc_load_all_raster_variables(table_id, layers, source, band)` | Register every variable of a raster table and its layers |
 | `backbone.gdsc_load_raster_variable(params jsonb)` | Register a single raster variable and its layers in `backbone.raster_layer` |
 | `working.spatial_join_raster_from_catalog(variable, table_id, method, buffer_m, exposure_type_concept_id)` | Join a raster variable by `point`, `buffer_mean` or `class_fraction` |
+| **Point sources** (`sql/08`) | |
+| `backbone.create_voronoi_source(source_table_id, target_table_id, clip, working_srid, segment_m)` | Voronoi cells of a point table as a polygon source |
+| `working.spatial_join_nearest_from_catalog(variable, table_id, k, max_distance_m, idw_power, record_distance, exposure_type_concept_id)` | Join a point variable by its nearest point(s): nearest or inverse-distance weighted |
 | **Spatial join** (`sql/04`) | |
 | `working.spatial_join_all_from_catalog(table_id, operator, buffer_m)` | Join every loaded variable for a table |
 | `working.spatial_join_from_catalog(variable, table_id, operator, buffer_m, exposure_type_concept_id)` | Join a single catalogued variable; the last argument is the Exposure Type Concept of the data source (default 0) |
@@ -281,4 +305,5 @@ Please use the [GitHub issue tracker](https://github.com/OHDSI/gaiaDB/issues) fo
   ```bash
   docker exec -i gaia-db psql -U postgres -d gaiacore < tests/test_jsonld_ingestion.sql
   docker exec -i gaia-db psql -U postgres -d gaiacore < tests/test_raster_join.sql
+  docker exec -i gaia-db psql -U postgres -d gaiacore < tests/test_point_sources.sql
   ```
