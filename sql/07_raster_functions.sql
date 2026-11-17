@@ -237,6 +237,9 @@ $$ LANGUAGE plpgsql;
 --                          and the class value in modifier_source_value; classes absent from the buffer
 --                          (fraction 0) get no row
 --   Each layer whose period overlaps a location's period gives one row, with the dates clipped to the overlap.
+--   The tiles are found with the spatial index raster2pgsql -I creates (on ST_ConvexHull(rast)); the buffer is computed
+--   once per location (OFFSET 0 keeps the planner from re-evaluating it for every tile: 955 ms against 2 ms per location
+--   on the Miami-Dade NLCD).
 --   p_exposure_type_concept_id is the "Exposure Type Concept" of the data source, 0 when not given.
 -- * - * - * - * - * - * - * - * - * -
 CREATE OR REPLACE FUNCTION working.spatial_join_raster_from_catalog(
@@ -310,8 +313,8 @@ BEGIN
                 FROM working.location_merge gol
                 JOIN backbone.raster_layer rl ON rl.attr_index_id = %2$L AND rl.raster_table = %3$L AND rl.raster_schema = %4$L
                     AND rl.start_date <= gol.end_date AND rl.end_date >= gol.start_date
-                CROSS JOIN LATERAL (SELECT ST_Transform(gol.geom, rl.srid) AS pt) p
-                JOIN %4$I.%3$I r ON %5$s AND ST_Intersects(r.%1$I, p.pt)
+                CROSS JOIN LATERAL (SELECT ST_Transform(gol.geom, rl.srid) AS pt OFFSET 0) p
+                JOIN %4$I.%3$I r ON %5$s AND ST_ConvexHull(r.%1$I) && p.pt AND ST_Intersects(r.%1$I, p.pt)
                 ORDER BY gol.location_history_id, rl.raster_layer_id, ST_Value(r.%1$I, rl.band, p.pt) NULLS LAST
             $SQL$, v_tbl.raster_column, v_attr_index_id, v_tbl.raster_table, v_tbl.raster_schema, v_filename_cond);
         ELSIF p_method = 'buffer_mean' THEN
@@ -322,8 +325,8 @@ BEGIN
                 FROM working.location_merge gol
                 JOIN backbone.raster_layer rl ON rl.attr_index_id = %2$L AND rl.raster_table = %3$L AND rl.raster_schema = %4$L
                     AND rl.start_date <= gol.end_date AND rl.end_date >= gol.start_date
-                CROSS JOIN LATERAL (SELECT ST_Transform(ST_Buffer(gol.geom::geography, %6$L)::geometry, rl.srid) AS b) p
-                JOIN %4$I.%3$I r ON %5$s AND ST_Intersects(r.%1$I, p.b)
+                CROSS JOIN LATERAL (SELECT ST_Transform(ST_Buffer(gol.geom::geography, %6$L)::geometry, rl.srid) AS b OFFSET 0) p
+                JOIN %4$I.%3$I r ON %5$s AND ST_ConvexHull(r.%1$I) && p.b AND ST_Intersects(r.%1$I, p.b)
                 CROSS JOIN LATERAL (SELECT ST_SummaryStats(ST_Clip(r.%1$I, rl.band, p.b, true)) AS st) ss
                 GROUP BY gol.location_history_id, rl.raster_layer_id, gol.location_id, gol.domain_id, gol.entity_id, rl.start_date, rl.end_date, gol.start_date, gol.end_date
             $SQL$, v_tbl.raster_column, v_attr_index_id, v_tbl.raster_table, v_tbl.raster_schema, v_filename_cond, p_buffer_meters);
@@ -340,8 +343,8 @@ BEGIN
                     FROM working.location_merge gol
                     JOIN backbone.raster_layer rl ON rl.attr_index_id = %2$L AND rl.raster_table = %3$L AND rl.raster_schema = %4$L
                         AND rl.start_date <= gol.end_date AND rl.end_date >= gol.start_date
-                    CROSS JOIN LATERAL (SELECT ST_Transform(ST_Buffer(gol.geom::geography, %6$L)::geometry, rl.srid) AS b) p
-                    JOIN %4$I.%3$I r ON %5$s AND ST_Intersects(r.%1$I, p.b)
+                    CROSS JOIN LATERAL (SELECT ST_Transform(ST_Buffer(gol.geom::geography, %6$L)::geometry, rl.srid) AS b OFFSET 0) p
+                    JOIN %4$I.%3$I r ON %5$s AND ST_ConvexHull(r.%1$I) && p.b AND ST_Intersects(r.%1$I, p.b)
                     CROSS JOIN LATERAL ST_ValueCount(ST_Clip(r.%1$I, rl.band, p.b, true), 1, true) AS vc(class_value, n)
                     GROUP BY gol.location_history_id, rl.raster_layer_id, gol.location_id, gol.domain_id, gol.entity_id,
                              rl.start_date, rl.end_date, gol.start_date, gol.end_date, vc.class_value
