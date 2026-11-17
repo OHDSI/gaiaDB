@@ -90,10 +90,24 @@ SELECT _assert('year-month dates run from the first day of the first month to th
 SELECT _fx('t_full', 'x', 'vector', '2000-01-01/2001-12-31', '2010-02-03', '2010-04-05');
 SELECT _assert('full dates are kept as they are and win over the temporalCoverage', _dates('t_full') = '2010-02-03/2010-04-05');
 
-SELECT _fx('t_cov', 'x', 'vector', '2014/2019', NULL, NULL);
-SELECT _assert('a variable without dates takes the temporalCoverage, years expanded (vector too)', _dates('t_cov') = '2014-01-01/2019-12-31');
+SELECT _fx('t_cov', 'x', 'vector', '2014/2019', NULL, NULL, FALSE, 'float8');
+SELECT _assert('a numeric variable without dates takes the temporalCoverage, years expanded (vector too)', _dates('t_cov') = '2014-01-01/2019-12-31');
 
-SELECT _fx('t_cov_single', 'x', 'vector', '2019', NULL, NULL);
+SELECT _fx('t_cov_jsonb', 'x', 'vector', '2014/2019', NULL, NULL, FALSE, 'jsonb');
+SELECT _assert('a jsonb series without dates takes the temporalCoverage', _dates('t_cov_jsonb') = '2014-01-01/2019-12-31');
+
+SELECT _fx('t_cov_text', 'x', 'vector', '2014/2019', NULL, NULL, FALSE, 'varchar');
+SELECT _assert('a text variable (identifier) does not take the temporalCoverage (no attr_index row)',
+    NOT EXISTS (SELECT 1 FROM backbone.attr_index WHERE table_name = 't_cov_text'));
+
+SELECT _fx('t_cov_notype', 'x', 'vector', '2014/2019', NULL, NULL);
+SELECT _assert('a variable without a data type does not take the temporalCoverage on a vector source (no attr_index row)',
+    NOT EXISTS (SELECT 1 FROM backbone.attr_index WHERE table_name = 't_cov_notype'));
+
+SELECT _fx('t_cov_rast', 'x', 'raster', '2014/2019', NULL, NULL);
+SELECT _assert('a raster variable takes the temporalCoverage whatever its type', _dates('t_cov_rast') = '2014-01-01/2019-12-31');
+
+SELECT _fx('t_cov_single', 'x', 'vector', '2019', NULL, NULL, FALSE, 'float8');
 SELECT _assert('a single-year temporalCoverage is that year', _dates('t_cov_single') = '2019-01-01/2019-12-31');
 
 SELECT _fx('mdc_2021_nlcd_x', '2021 Miami-Dade NLCD X', 'raster', NULL, NULL, NULL);

@@ -288,7 +288,8 @@ BEGIN
         -- Dates are ISO (YYYY-MM-DD), but a year ("2021") or a month ("2021-03") is accepted: it stands for
         -- the whole period (1 January to 31 December). When only one end is given the other is the end of
         -- the same period, so startDate "2021" alone is the year 2021. A variable without dates takes the
-        -- dataset's temporalCoverage, then the static period (1900-01-01 to 2100-12-31) when the dataset is
+        -- dataset's temporalCoverage (a raster, or a numeric or jsonb variable: identifiers and names stay
+        -- unregistered), then the static period (1900-01-01 to 2100-12-31) when the dataset is
         -- marked temporalDimension static (a raster, or a variable with a numeric qudt:dataType: identifiers and
         -- names stay unregistered), then for a raster the year in its name or table_id; a raster with
         -- no date at all is static, unless its name and table_id disagree on a year.
@@ -307,7 +308,8 @@ BEGIN
             v_end_date := backbone.parse_partial_date(v_variable->>'startDate', TRUE);
             v_date_note := 'the period of startDate';
         ELSIF v_start_date IS NULL AND v_end_date IS NULL THEN
-            IF v_cov_start IS NOT NULL THEN
+            IF v_cov_start IS NOT NULL AND (v_structure = 'raster' OR v_numeric
+                    OR lower(COALESCE(v_variable->>'qudt:dataType', '')) IN ('jsonb', 'json')) THEN
                 v_start_date := v_cov_start; v_end_date := v_cov_end;
                 v_date_note := 'the dataset temporalCoverage';
             ELSIF v_static_marked AND (v_structure = 'raster' OR v_numeric) THEN
