@@ -259,6 +259,10 @@ BEGIN
 		);
 	END IF;
 
+	-- CREATE TABLE ... AS TABLE copies no indexes: the spatial index of the template is made here (idempotent), so that
+	-- the joins (ST_Intersects, ST_DWithin, nearest-point) do not scan every geometry for every location.
+	EXECUTE format('CREATE INDEX IF NOT EXISTS %I ON working.%I USING gist (geom_wgs84)', 'idx_' || geom_table_name || '_wgs84', geom_table_name);
+
 	-- Record the observed geometry type (most frequent feature type) on the catalog row.
 	EXECUTE format(
 		'UPDATE backbone.geom_index SET geom_type_concept_id = (
@@ -337,6 +341,8 @@ BEGIN
 			attr_table_name, 'fk_' || attr_table_name || '_' || geom_table_name, geom_table_name
 		);
 	END IF;
+
+	EXECUTE format('CREATE INDEX IF NOT EXISTS %I ON working.%I (attr_index_id, geom_record_id, attr_start_date)', 'idx_' || attr_table_name || '_variable', attr_table_name);
 
 	EXECUTE format('SELECT EXISTS (SELECT 1 FROM working.%I WHERE attr_index_id = %L)', attr_table_name, attr_id)
 		INTO attr_rows_loaded;

@@ -97,6 +97,11 @@ SELECT _assert('idw: the weighted mean of the k nearest, weights 1 / distance^2 
 SELECT _assert('idw: the method is written verbatim', (SELECT bool_and(exposure_relationship_source_value = 'idw k=2 power=2') FROM working.external_exposure WHERE person_id = 900001));
 
 DELETE FROM working.external_exposure;
+SELECT working.spatial_join_nearest_from_catalog('pm25', 'test_mon');
+SELECT _assert('record distance: on by default',
+    (SELECT bool_and(modifier_source_value LIKE 'distance_m=%') FROM working.external_exposure));
+
+DELETE FROM working.external_exposure;
 
 -- -------------------------------------------------------------------------
 -- Voronoi cells
@@ -173,5 +178,35 @@ BEGIN
 EXCEPTION WHEN OTHERS THEN
     RAISE NOTICE 'PASS: unknown variable raises';
 END $$;
+
+-- -------------------------------------------------------------------------
+-- Guards and privileges
+-- -------------------------------------------------------------------------
+CREATE TABLE public.test_not_a_voronoi (id integer);
+DO $j$
+BEGIN
+    PERFORM backbone.create_voronoi_source('test_mon', 'test_not_a_voronoi');
+    RAISE NOTICE 'FAIL: replacing a table that was not made by create_voronoi_source should raise';
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'PASS: a table that was not made by create_voronoi_source is not replaced (%)', left(SQLERRM, 40);
+END
+$j$;
+SELECT _assert('the foreign table is still there', to_regclass('public.test_not_a_voronoi') IS NOT NULL);
+
+DO $j$
+BEGIN
+    PERFORM backbone.create_voronoi_source('test_mon', 'test_mon');
+    RAISE NOTICE 'FAIL: target = source should raise';
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'PASS: the target must not be the source table (%)', left(SQLERRM, 40);
+END
+$j$;
+
+SELECT _assert('a Voronoi table carries the mark with its source',
+    obj_description('public.test_mon_vor'::regclass, 'pg_class') LIKE 'created by backbone.create_voronoi_source from public.test_mon %');
+
+SELECT _assert('privileges: the anonymous role cannot create Voronoi tables, and can join',
+    NOT has_function_privilege('web_anon', 'backbone.create_voronoi_source(text, text, geometry, integer, numeric)', 'EXECUTE')
+    AND has_function_privilege('web_anon', 'working.spatial_join_nearest_from_catalog(text, text, integer, numeric, numeric, boolean, integer)', 'EXECUTE'));
 
 ROLLBACK;

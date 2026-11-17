@@ -18,6 +18,8 @@
 --   p_segment_m        edges are cut into segments of this length before the cells are converted back to the point
 --                      table's CRS, so that they stay straight in the projection
 --   Returns the number of cells. A point outside p_clip has no cell. Two points at the same location are an error.
+--   The target table is marked with a comment (source, CRS, segment length, clip); only a table that carries the mark is
+--   replaced, so a call cannot drop any other table of public. Not executable by PUBLIC (see Privileges below).
 -- * - * - * - * - * - * - * - * - * -
 CREATE OR REPLACE FUNCTION backbone.create_voronoi_source(
     p_source_table_id TEXT,
@@ -42,6 +44,14 @@ DECLARE
     v_has_fid   BOOLEAN;
     v_count     INTEGER;
 BEGIN
+    IF p_target_table_id = p_source_table_id THEN
+        RAISE EXCEPTION 'the target table must not be the source table (%)', p_source_table_id;
+    END IF;
+    IF to_regclass(format('public.%I', p_target_table_id)) IS NOT NULL
+       AND COALESCE(obj_description(to_regclass(format('public.%I', p_target_table_id)), 'pg_class'), '') NOT LIKE 'created by backbone.create_voronoi_source%' THEN
+        RAISE EXCEPTION 'public.% exists and was not made by create_voronoi_source: it is not replaced (drop it yourself if that is what you want)', p_target_table_id;
+    END IF;
+
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = p_source_table_id AND column_name = 'geom') THEN
         RAISE EXCEPTION 'public.%.geom not found. Has the point source been ingested (backbone.ingest_datasource)?', p_source_table_id;
     END IF;
@@ -106,6 +116,9 @@ BEGIN
     GET DIAGNOSTICS v_count = ROW_COUNT;
 
     EXECUTE format('CREATE INDEX IF NOT EXISTS %I ON public.%I USING gist (geom)', p_target_table_id || '_geom_geom_idx', p_target_table_id);
+    EXECUTE format('COMMENT ON TABLE public.%I IS %L', p_target_table_id,
+                   format('created by backbone.create_voronoi_source from public.%s (EPSG:%s, segments of %s m, clip %s)',
+                          p_source_table_id, v_work_srid, p_segment_m, ST_AsText(ST_SnapToGrid(v_clip, 1))));
     RAISE NOTICE 'Voronoi source public.%: % cells from % points (tessellated in EPSG:%)', p_target_table_id, v_count, v_n, v_work_srid;
     RETURN v_count;
 END;
@@ -124,11 +137,16 @@ COMMENT ON FUNCTION backbone.create_voronoi_source(TEXT, TEXT, GEOMETRY, INTEGER
 --   p_k                 1 (default): the value of the nearest point. More: the inverse-distance weighted mean of the k nearest
 --   p_max_distance_m    points further away than this are not used; a location with none gets no row (default: no limit)
 --   p_idw_power         the power of the distance in the weights 1 / distance^power (default 2; distances under 1 m count as 1 m)
---   p_record_distance   write 'distance_m=<distance to the nearest point>' to modifier_source_value (default off)
---   Distances are geodesic (geography), in metres. Ties go to the point with the lowest geom_record_id. A point that
---   has no value for a window is not a candidate for that window. The relationship is "Near/Proximity to"
---   (2052497004); the verbatim method is in exposure_relationship_source_value ('nearest' or 'idw k=.. power=..').
---   Without a spatial index every location is compared with every point: fine for networks of up to some thousands of points.
+--   p_record_distance   write 'distance_m=<distance to the nearest point>' to modifier_source_value (default on: how far the
+--                       nearest point is says whether the value means anything for the location)
+--   The k nearest are found with the spatial index (k-nearest-neighbour search, a GiST index on the geography of the
+--   geometry table, created on first use), so the cost grows with k and the number of locations, not with the number of
+--   points. The search ranks by spherical distance (what the index orders by); the distances that are used and recorded are
+--   geodesic (spheroid), in metres. The two differ by up to about 0.3%, so two points whose distances differ by less than
+--   that can be ranked the other way round from an exact spheroid ordering. Of points at exactly the same distance either
+--   may come first (a second sort key would stop the planner from using the index); the same data gives the same answer. A point that has no value for a window is not a candidate for that window. The relationship is
+--   "Near/Proximity to" (2052497004); the verbatim method is in exposure_relationship_source_value ('nearest' or
+--   'idw k=.. power=..').
 -- * - * - * - * - * - * - * - * - * -
 CREATE OR REPLACE FUNCTION working.spatial_join_nearest_from_catalog(
     p_variable_name TEXT,
@@ -136,7 +154,7 @@ CREATE OR REPLACE FUNCTION working.spatial_join_nearest_from_catalog(
     p_k INTEGER DEFAULT 1,
     p_max_distance_m NUMERIC DEFAULT NULL,
     p_idw_power NUMERIC DEFAULT 2,
-    p_record_distance BOOLEAN DEFAULT FALSE,
+    p_record_distance BOOLEAN DEFAULT TRUE,
     p_exposure_type_concept_id INTEGER DEFAULT 0
 )
 RETURNS INTEGER AS $$
@@ -150,9 +168,9 @@ DECLARE
     v_attr_concept_id INTEGER;
     v_unit_concept_id INTEGER;
     v_variable_source_id INTEGER;
-    v_attr_start_date DATE;
-    v_attr_end_date DATE;
     v_method TEXT;
+    v_geog_index TEXT;
+    v_dwithin TEXT;
     v_count INTEGER;
 BEGIN
     IF COALESCE(p_k, 0) < 1 THEN
@@ -160,9 +178,9 @@ BEGIN
     END IF;
 
     SELECT ai.attr_index_id, ai.geom_index_id, ai.database_schema, 'attr_' || ai.table_name,
-           ai.attr_concept_id, ai.unit_concept_id, ai.attr_start_date, ai.attr_end_date, ai.variable_source_id
+           ai.attr_concept_id, ai.unit_concept_id, ai.variable_source_id
     INTO v_attr_index_id, v_geom_index_id, v_attr_schema, v_attr_table_name,
-         v_attr_concept_id, v_unit_concept_id, v_attr_start_date, v_attr_end_date, v_variable_source_id
+         v_attr_concept_id, v_unit_concept_id, v_variable_source_id
     FROM backbone.attr_index ai
     WHERE ai.variable_name = p_variable_name
       AND (p_table_id IS NULL OR ai.table_name = p_table_id)
@@ -180,6 +198,19 @@ BEGIN
     IF NOT FOUND THEN
         RAISE EXCEPTION 'geom_index_id % (referenced by attr_index_id %) not found in backbone.geom_index', v_geom_index_id, v_attr_index_id;
     END IF;
+
+    -- KNN needs an index on the same expression as the ORDER BY (first use only; a role that may not create it falls back to a scan)
+    v_geog_index := 'idx_' || v_geom_table_name || '_wgs84_geog';
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = v_geom_schema AND tablename = v_geom_table_name AND indexname = left(v_geog_index, 63)) THEN
+        BEGIN
+            EXECUTE format('CREATE INDEX IF NOT EXISTS %I ON %I.%I USING gist ((geom_wgs84::geography))', v_geog_index, v_geom_schema, v_geom_table_name);
+            EXECUTE format('ANALYZE %I.%I', v_geom_schema, v_geom_table_name);
+        EXCEPTION WHEN insufficient_privilege THEN
+            RAISE NOTICE 'no privilege to create %: the nearest search scans every point', v_geog_index;
+        END;
+    END IF;
+    v_dwithin := CASE WHEN p_max_distance_m IS NULL THEN ''
+                      ELSE format('AND ST_DWithin(geo.geom_wgs84::geography, gol.geom::geography, %L::numeric)', p_max_distance_m) END;
 
     v_method := CASE WHEN p_k = 1 THEN 'nearest' ELSE format('idw k=%s power=%s', p_k, p_idw_power) END;
 
@@ -208,23 +239,24 @@ BEGIN
                    GREATEST(w.s, gol.start_date) AS s, LEAST(w.e, gol.end_date) AS e,
                    sum(nn.val * nn.wt) / sum(nn.wt) AS v, min(nn.d) AS d_nearest
             FROM working.location_merge gol
-            -- the time windows of the variable (one per year, month, ...; the variable's overall span for rows without their own)
-            JOIN (SELECT DISTINCT COALESCE(att.attr_start_date, %7$L::date) AS s, COALESCE(att.attr_end_date, %8$L::date) AS e
-                  FROM %9$I.%10$I att WHERE att.attr_index_id = %11$L) w
+            -- the time windows of the variable (one per year, month, ...; plain equality on the dates so that the attribute index is used)
+            JOIN (SELECT DISTINCT att.attr_start_date AS s, att.attr_end_date AS e
+                  FROM %7$I.%8$I att WHERE att.attr_index_id = %9$L) w
               ON w.s <= gol.end_date AND w.e >= gol.start_date
             CROSS JOIN LATERAL (
-                SELECT q.val, q.d, 1.0 / power(GREATEST(q.d, 1.0), %12$L::numeric) AS wt
+                SELECT q.val, q.d, 1.0 / power(GREATEST(q.d, 1.0), %10$L::numeric) AS wt
                 FROM (
                     SELECT att.value_as_number AS val, ST_Distance(gol.geom::geography, geo.geom_wgs84::geography) AS d
-                    FROM %9$I.%10$I att
-                    JOIN %13$I.%14$I geo ON att.geom_record_id = geo.geom_record_id
-                    WHERE att.attr_index_id = %11$L
-                      AND COALESCE(att.attr_start_date, %7$L::date) = w.s AND COALESCE(att.attr_end_date, %8$L::date) = w.e
+                    FROM %7$I.%8$I att
+                    JOIN %11$I.%12$I geo ON att.geom_record_id = geo.geom_record_id
+                    WHERE att.attr_index_id = %9$L
+                      AND att.attr_start_date = w.s AND att.attr_end_date = w.e
                       AND att.value_as_number IS NOT NULL AND gol.geom IS NOT NULL
-                    ORDER BY ST_Distance(gol.geom::geography, geo.geom_wgs84::geography), geo.geom_record_id
-                    LIMIT %15$s
+                      %15$s
+                    ORDER BY geo.geom_wgs84::geography <-> gol.geom::geography
+                    LIMIT %13$s
                 ) q
-                WHERE %16$L::numeric IS NULL OR q.d <= %16$L::numeric
+                WHERE %14$L::numeric IS NULL OR q.d <= %14$L::numeric
             ) nn
             GROUP BY gol.location_history_id, w.s, w.e, gol.location_id, gol.domain_id, gol.entity_id, gol.start_date, gol.end_date
         ) hit
@@ -235,13 +267,13 @@ BEGIN
         v_method,                               -- 4: exposure_relationship_source_value
         p_record_distance,                      -- 5
         v_unit_concept_id,                      -- 6
-        v_attr_start_date, v_attr_end_date,     -- 7, 8: fallback window
-        v_attr_schema, v_attr_table_name,       -- 9, 10
-        v_attr_index_id,                        -- 11
-        p_idw_power,                            -- 12
-        v_geom_schema, v_geom_table_name,       -- 13, 14
-        p_k,                                    -- 15
-        p_max_distance_m                        -- 16
+        v_attr_schema, v_attr_table_name,       -- 7, 8
+        v_attr_index_id,                        -- 9
+        p_idw_power,                            -- 10
+        v_geom_schema, v_geom_table_name,       -- 11, 12
+        p_k,                                    -- 13
+        p_max_distance_m,                       -- 14
+        v_dwithin                               -- 15: the distance limit, in a form the index can use
     );
 
     GET DIAGNOSTICS v_count = ROW_COUNT;
@@ -252,3 +284,12 @@ $$ LANGUAGE plpgsql;
 
 COMMENT ON FUNCTION working.spatial_join_nearest_from_catalog(TEXT, TEXT, INTEGER, NUMERIC, NUMERIC, BOOLEAN, INTEGER)
     IS 'join locations to the nearest point(s) of a loaded variable (nearest or inverse-distance weighted) into working.external_exposure';
+
+
+-- * - * - * - * - * - * - * - * - * -
+-- Privileges
+--   create_voronoi_source creates and replaces a table of public: not for the anonymous PostgREST role (functions are
+--   executable by PUBLIC unless revoked). The join function, like spatial_join_from_catalog, only reads the catalog
+--   and writes working.external_exposure and stays as it is.
+-- * - * - * - * - * - * - * - * - * -
+REVOKE EXECUTE ON FUNCTION backbone.create_voronoi_source(TEXT, TEXT, GEOMETRY, INTEGER, NUMERIC) FROM PUBLIC;

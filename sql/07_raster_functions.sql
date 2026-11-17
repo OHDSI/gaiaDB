@@ -45,19 +45,42 @@ $$ LANGUAGE sql STABLE;
 
 
 -- * - * - * - * - * - * - * - * - * -
--- backbone.raster_layers_from_etl_metadata(table_id)
---   The raster_layers array of /data/{table_id}/meta_etl_{table_id}.json: the period each file of a
---   multi-file raster table stands for, as [{"filename", "start_date", "end_date"}]. NULL when the
---   file, or the field, is not there (the table is then one layer over the variable's dates).
+-- backbone.etl_metadata_field(table_id, key)
+--   One top-level field of /data/{table_id}/meta_etl_{table_id}.json; NULL when the table_id is not a plain
+--   identifier (letters, digits, underscore: it becomes part of a file path), or the file or the field is not there.
 -- * - * - * - * - * - * - * - * - * -
-CREATE OR REPLACE FUNCTION backbone.raster_layers_from_etl_metadata(p_table_id TEXT)
+CREATE OR REPLACE FUNCTION backbone.etl_metadata_field(p_table_id TEXT, p_key TEXT)
 RETURNS JSONB AS $$
 BEGIN
-    RETURN (pg_read_file(format('/data/%s/meta_etl_%s.json', p_table_id, p_table_id))::jsonb)->'raster_layers';
+    IF p_table_id IS NULL OR p_table_id !~ '^[A-Za-z0-9_]+$' THEN
+        RETURN NULL;
+    END IF;
+    RETURN (pg_read_file(format('/data/%s/meta_etl_%s.json', p_table_id, p_table_id))::jsonb)->p_key;
 EXCEPTION WHEN OTHERS THEN
     RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
+
+-- * - * - * - * - * - * - * - * - * -
+-- backbone.raster_layers_from_etl_metadata(table_id)
+--   The raster_layers array of the ETL metadata: the period each file of a multi-file raster table stands
+--   for, as [{"filename", "start_date", "end_date"}]. NULL when the file, or the field, is not there (the
+--   table is then one layer over the variable's dates).
+-- * - * - * - * - * - * - * - * - * -
+CREATE OR REPLACE FUNCTION backbone.raster_layers_from_etl_metadata(p_table_id TEXT)
+RETURNS JSONB AS $$
+    SELECT backbone.etl_metadata_field(p_table_id, 'raster_layers');
+$$ LANGUAGE sql;
+
+-- * - * - * - * - * - * - * - * - * -
+-- backbone.raster_bands_from_etl_metadata(table_id)
+--   The raster_bands object of the ETL metadata: the band of each variable of a multi-band raster, as
+--   {"<variable name>": <band number>}. NULL when not given (every variable is then band 1).
+-- * - * - * - * - * - * - * - * - * -
+CREATE OR REPLACE FUNCTION backbone.raster_bands_from_etl_metadata(p_table_id TEXT)
+RETURNS JSONB AS $$
+    SELECT backbone.etl_metadata_field(p_table_id, 'raster_bands');
+$$ LANGUAGE sql;
 
 
 -- * - * - * - * - * - * - * - * - * -
@@ -163,12 +186,16 @@ COMMENT ON FUNCTION backbone.gdsc_load_raster_variable(jsonb)
 --   Register every variable of a table_id that ingest_jsonld_variables put in attr_index, taking
 --   description, concept, unit and dates from there (the raster counterpart of gdsc_load_all_variables).
 --   p_layers is passed to every variable, e.g. one entry per file of an annual series.
+--   p_bands gives the band of each variable of a multi-band raster, {"<variable name>": <band>}; a variable not
+--   in it reads p_band (default 1).
 -- * - * - * - * - * - * - * - * - * -
+DROP FUNCTION IF EXISTS backbone.gdsc_load_all_raster_variables(TEXT, JSONB, TEXT, INTEGER);
 CREATE OR REPLACE FUNCTION backbone.gdsc_load_all_raster_variables(
     p_table_id TEXT,
     p_layers   JSONB DEFAULT NULL,
     p_source   TEXT  DEFAULT NULL,
-    p_band     INTEGER DEFAULT 1
+    p_band     INTEGER DEFAULT 1,
+    p_bands    JSONB DEFAULT NULL
 )
 RETURNS TABLE(variable_name TEXT, result JSON) AS $$
 DECLARE
@@ -183,7 +210,7 @@ BEGIN
     LOOP
         variable_name := v_row.vname;
         result := backbone.gdsc_load_raster_variable(jsonb_strip_nulls(jsonb_build_object(
-            'table_id', p_table_id, 'variable_id', v_row.vname, 'band', p_band,
+            'table_id', p_table_id, 'variable_id', v_row.vname, 'band', COALESCE((p_bands->>v_row.vname)::integer, p_band),
             'description', v_row.variable_desc, 'concept_id', v_row.attr_concept_id, 'unit_concept_id', v_row.unit_concept_id,
             'unit', v_row.unit_source_value, 'start_date', v_row.attr_start_date, 'end_date', v_row.attr_end_date,
             'source', p_source, 'table_description', v_row.table_desc, 'layers', p_layers)));
@@ -357,3 +384,15 @@ $$ LANGUAGE plpgsql;
 
 COMMENT ON FUNCTION working.spatial_join_raster_from_catalog(TEXT, TEXT, TEXT, NUMERIC, INTEGER)
     IS 'join locations to a registered raster variable (point value, buffer mean or class fractions) into working.external_exposure';
+
+
+-- * - * - * - * - * - * - * - * - * -
+-- Privileges
+--   Registering a raster runs dynamic SQL on a caller-chosen table: not for the anonymous PostgREST role (functions
+--   are executable by PUBLIC unless revoked), so ingest_datasource registers a raster only for a role that may.
+--   The join function, like spatial_join_from_catalog, only reads the catalog and writes working.external_exposure and
+--   stays as it is. The ETL metadata readers take a plain identifier only (it becomes part of a file path) and
+--   read the file with pg_read_file, which the anonymous role has no right to use.
+-- * - * - * - * - * - * - * - * - * -
+REVOKE EXECUTE ON FUNCTION backbone.gdsc_load_raster_variable(JSONB) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION backbone.gdsc_load_all_raster_variables(TEXT, JSONB, TEXT, INTEGER, JSONB) FROM PUBLIC;

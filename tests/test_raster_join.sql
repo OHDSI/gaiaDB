@@ -215,6 +215,47 @@ SELECT _assert('structure: raster, vector and missing are told apart',
 
 SELECT _assert('layers from ETL metadata: no file, no layers (NULL)', backbone.raster_layers_from_etl_metadata('no_such_table_id') IS NULL);
 
+SELECT _assert('layers from ETL metadata: a table_id that is not a plain identifier is refused (it becomes a file path)',
+    backbone.etl_metadata_field('../../etc/passwd', 'raster_layers') IS NULL AND backbone.raster_bands_from_etl_metadata('a/b') IS NULL);
+
+-- -------------------------------------------------------------------------
+-- A band per variable
+-- -------------------------------------------------------------------------
+CREATE TABLE public.t_bands (rid SERIAL PRIMARY KEY, rast raster);
+INSERT INTO public.t_bands (rast)
+SELECT ST_AddBand(ST_AddBand(ST_MakeEmptyRaster(2, 2, -2026000, 1464000, 1000, -1000, 0, 0, 5070), '32BF'::text, 5, -9999), '32BF'::text, 50, -9999);
+
+DO $j$
+DECLARE doc JSONB;
+BEGIN
+    doc := jsonb_build_object('@id', 'https://example.org/t_bands', 'name', 'two-band raster', 'type', 'Dataset',
+        'measurementTechnique', jsonb_build_array(jsonb_build_object('inDefinedTermSet', jsonb_build_object('name', 'dataRepresentation'), 'termCode', 'raster')),
+        'variableMeasured', jsonb_build_array(
+            jsonb_build_object('name', 'b_first', 'startDate', '2014-01-01', 'endDate', '2014-12-31'),
+            jsonb_build_object('name', 'b_second', 'startDate', '2014-01-01', 'endDate', '2014-12-31')));
+    PERFORM backbone.ingest_jsonld_variables(doc, backbone.ingest_jsonld_metadata(doc));
+END
+$j$;
+
+SELECT count(*) FROM backbone.gdsc_load_all_raster_variables('t_bands', NULL, 'test', 1, '{"b_second": 2}'::jsonb);
+SELECT _assert('bands: a variable named in p_bands reads its band, the others the default band',
+    (SELECT array_agg(ai.variable_name || ':' || rl.band ORDER BY ai.variable_name) = ARRAY['b_first:1', 'b_second:2']
+     FROM backbone.raster_layer rl JOIN backbone.attr_index ai USING (attr_index_id) WHERE ai.table_name = 't_bands'));
+
+DELETE FROM working.external_exposure;
+SELECT working.spatial_join_raster_from_catalog('b_second', 't_bands');
+SELECT _assert('bands: the join of the second variable reads band 2',
+    (SELECT value_as_number = 50 FROM working.external_exposure WHERE person_id = 900001 LIMIT 1));
+DELETE FROM working.external_exposure;
+
+-- -------------------------------------------------------------------------
+-- Privileges
+-- -------------------------------------------------------------------------
+SELECT _assert('privileges: the anonymous role cannot register a raster, and can join',
+    NOT has_function_privilege('web_anon', 'backbone.gdsc_load_raster_variable(jsonb)', 'EXECUTE')
+    AND NOT has_function_privilege('web_anon', 'backbone.gdsc_load_all_raster_variables(text, jsonb, text, integer, jsonb)', 'EXECUTE')
+    AND has_function_privilege('web_anon', 'working.spatial_join_raster_from_catalog(text, text, text, numeric, integer)', 'EXECUTE'));
+
 -- -------------------------------------------------------------------------
 -- Errors
 -- -------------------------------------------------------------------------

@@ -149,6 +149,9 @@ $$ LANGUAGE plpgsql;
 -- ---------------------------------------------------------------------------
 -- backbone.ingest_datasource
 -- Full three-step protocol:
+--   0. Sources the ETL metadata lists under "dependency" that are not in public yet are ingested first
+--      (ingest_datasource on each, to a depth of 5), their steps reported with the dependency's table_id as prefix;
+--      an error in one of them stops here
 --   1. Load JSON-LD metadata (ingest_jsonld_metadata + ingest_jsonld_variables)
 --   2. Run {table_id}_osgeo.sh   — download source file and load via ogr2ogr
 --   3. Run {table_id}_postgis.sh — clean geometry and add local projection column
@@ -156,9 +159,11 @@ $$ LANGUAGE plpgsql;
 --   4. Raster sources only (structure raster in the JSON-LD): register the variables and layers
 --      with gdsc_load_all_raster_variables, taking the layers from the ETL metadata
 -- ---------------------------------------------------------------------------
+DROP FUNCTION IF EXISTS backbone.ingest_datasource(TEXT, TEXT);
 CREATE OR REPLACE FUNCTION backbone.ingest_datasource(
     p_table_id TEXT,
-    p_shell    TEXT DEFAULT '/bin/sh'
+    p_shell    TEXT DEFAULT '/bin/sh',
+    p_depth    INTEGER DEFAULT 0
 )
 RETURNS TABLE(step TEXT, status TEXT, message TEXT) AS $$
 DECLARE
@@ -170,6 +175,8 @@ DECLARE
     v_osgeo_ok         BOOLEAN := TRUE;
     v_structure        TEXT;
     v_raster_vars      INTEGER;
+    v_dep              TEXT;
+    v_dep_ok           BOOLEAN;
     v_step             TEXT;
     v_status           TEXT;
     v_message          TEXT;
@@ -198,6 +205,37 @@ BEGIN
     RETURN NEXT;
 
     v_structure := backbone.datasource_structure(v_data_source_uuid);
+
+    -- Dependencies: sources this one is built from or joined through (e.g. the monitors of a Voronoi source)
+    FOR v_dep IN
+        SELECT d FROM jsonb_array_elements_text(
+            CASE WHEN jsonb_typeof(backbone.etl_metadata_field(p_table_id, 'dependency')) = 'array'
+                 THEN backbone.etl_metadata_field(p_table_id, 'dependency') ELSE '[]'::jsonb END) d
+    LOOP
+        IF v_dep = p_table_id THEN CONTINUE; END IF;
+        IF to_regclass(format('public.%I', v_dep)) IS NOT NULL THEN
+            step := 'dependency'; status := 'skipped'; message := format('%s is already loaded', v_dep);
+            RETURN NEXT;
+            CONTINUE;
+        END IF;
+        IF p_depth >= 5 THEN
+            step := 'dependency'; status := 'error'; message := format('dependencies of %s are nested more than 5 deep (a cycle?)', p_table_id);
+            RETURN NEXT;
+            RETURN;
+        END IF;
+        v_dep_ok := TRUE;
+        FOR v_step, v_status, v_message IN SELECT r.step, r.status, r.message FROM backbone.ingest_datasource(v_dep, p_shell, p_depth + 1) r
+        LOOP
+            step := v_dep || ': ' || v_step; status := v_status; message := v_message;
+            RETURN NEXT;
+            IF v_status = 'error' THEN v_dep_ok := FALSE; END IF;
+        END LOOP;
+        IF NOT v_dep_ok THEN
+            step := 'dependency'; status := 'error'; message := format('dependency %s of %s failed: not ingesting %s', v_dep, p_table_id, p_table_id);
+            RETURN NEXT;
+            RETURN;
+        END IF;
+    END LOOP;
 
     -- Step 2: osgeo — download source data and load into PostGIS via ogr2ogr.
     -- Stream each row from retrieve_and_ingest_datasource, tracking any error in one pass.
@@ -244,7 +282,8 @@ BEGIN
         BEGIN
             SELECT count(*) INTO v_raster_vars
             FROM backbone.gdsc_load_all_raster_variables(
-                p_table_id, backbone.raster_layers_from_etl_metadata(p_table_id), v_dataset_name);
+                p_table_id, backbone.raster_layers_from_etl_metadata(p_table_id), v_dataset_name,
+                1, backbone.raster_bands_from_etl_metadata(p_table_id));
         EXCEPTION WHEN OTHERS THEN
             step := 'raster_register'; status := 'error';
             message := format('Raster registration failed: %s', SQLERRM);
