@@ -54,12 +54,10 @@ AS $BODY$
 DECLARE
 	result json;
 BEGIN
-	-- get the list of loaded variables
-	EXECUTE format('
-		SELECT json_agg(variable_name)
-			FROM backbone.attr_index
-			WHERE table_name=''%s'';
-	', table_id) INTO result;
+	-- get the list of loaded variables (table_id is a value, not part of the SQL text)
+	SELECT json_agg(ai.variable_name) INTO result
+		FROM backbone.attr_index ai
+		WHERE ai.table_name = gdsc_get_loaded_variables_for_table.table_id;
 
 	RETURN result;
 	
