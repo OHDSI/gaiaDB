@@ -447,9 +447,16 @@ BEGIN
         RAISE EXCEPTION 'Invalid JSON-LD: %', SQLERRM;
     END;
 
-    v_data_source_uuid := backbone.ingest_jsonld_metadata(v_jsonld);
-    v_dataset_name     := v_jsonld->>'name';
-    v_var_count        := backbone.ingest_jsonld_variables(v_jsonld, v_data_source_uuid);
+    IF backbone.is_recipe(v_jsonld) THEN
+        -- a recipe (sql/08b_recipe_ingestion.sql; the functions are looked up when this one runs)
+        v_data_source_uuid := backbone.ingest_recipe_metadata(v_jsonld);
+        v_dataset_name     := v_jsonld->>'schema:name';
+        v_var_count        := backbone.ingest_recipe_variables(v_jsonld, v_data_source_uuid);
+    ELSE
+        v_data_source_uuid := backbone.ingest_jsonld_metadata(v_jsonld);
+        v_dataset_name     := v_jsonld->>'name';
+        v_var_count        := backbone.ingest_jsonld_variables(v_jsonld, v_data_source_uuid);
+    END IF;
 
     RETURN QUERY SELECT v_data_source_uuid, v_dataset_name, v_var_count;
 END;
