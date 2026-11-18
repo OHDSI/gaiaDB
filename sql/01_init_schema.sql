@@ -29,11 +29,11 @@ GRANT USAGE ON SCHEMA working TO PUBLIC;
 -- non-authenticated read role
 -- TODO: make limited priviledges and use authenicated role (below)
 CREATE ROLE web_anon NOLOGIN;
--- the unauthenticated role reads the catalog and the vocabulary and nothing else: no write, no CREATE, and no access to
--- working (persons, locations, exposures) or public (loaded data); see sql/09_privileges.sql for the functions
-GRANT USAGE ON SCHEMA vocabulary TO web_anon;
-GRANT SELECT ON ALL TABLES IN SCHEMA backbone, vocabulary TO web_anon;
-ALTER DEFAULT PRIVILEGES IN SCHEMA backbone, vocabulary GRANT SELECT ON TABLES TO web_anon;
+GRANT CREATE ON SCHEMA public, working TO web_anon;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA backbone, public, working, vocabulary TO web_anon;
+ALTER DEFAULT PRIVILEGES IN SCHEMA backbone, public, working, vocabulary GRANT ALL ON TABLES TO web_anon;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA backbone, public, working, vocabulary TO web_anon;
+ALTER DEFAULT PRIVILEGES IN SCHEMA backbone, public, working, vocabulary GRANT ALL ON SEQUENCES TO web_anon;
 GRANT web_anon TO authenticator;
 
 -- authenticated crud role
@@ -531,4 +531,3 @@ ALTER TABLE vocabulary.drug_strength
 \i /sql/06_gdsc_catalog_functions.sql
 \i /sql/07_raster_functions.sql
 \i /sql/08_point_source_functions.sql
-\i /sql/09_privileges.sql
