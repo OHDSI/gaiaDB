@@ -308,4 +308,5 @@ Please use the [GitHub issue tracker](https://github.com/OHDSI/gaiaDB/issues) fo
   docker exec -i gaia-db psql -U postgres -d gaiacore < tests/test_jsonld_ingestion.sql
   docker exec -i gaia-db psql -U postgres -d gaiacore < tests/test_raster_join.sql
   docker exec -i gaia-db psql -U postgres -d gaiacore < tests/test_point_sources.sql
+  docker exec -i gaia-db psql -U postgres -d gaiacore < tests/test_recipe_ingestion.sql
   ```
